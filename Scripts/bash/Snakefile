@@ -1,0 +1,49 @@
+configfile: "config.yaml"
+
+# Remember to be in gut_env enviroment in Conda before running Snakemake
+import os
+import glob
+
+
+# Extract sample names
+PATH_fastq = "/c3se/NOBACKUP/users/angelol/data/" + 'fastqfiles/ERR*'
+SAMPLES = sorted([os.path.splitext(val)[0] for val in (glob.glob(PATH_fastq))]) #Remove .gz from filename path
+SAMPLES = [os.path.splitext(val)[0] for val in SAMPLES]
+SAMPLES = [os.path.basename(val) for val in SAMPLES]
+SAMPLES = [x[:-2] for x in SAMPLES]
+SAMPLES = list(set(SAMPLES))
+
+rule all:
+    input:
+        "FASTPworked.txt"
+    output:
+        "dag.svg"
+    shell:
+        """
+        snakemake --dag | dot -Tsvg > {output}
+        """
+
+rule fastp_filter:
+    input:
+        R1 = PATH + "fastqfiles/{sample}_1.fastq.gz",
+        R2 = PATH + "fastqfiles/{sample}_2.fastq.gz"
+    output:
+        R1 = PATH + "filtered_reads/{sample}_1_filtered.fastq.gz",
+        R2 = PATH + "filtered_reads/{sample}_2_filtered.fastq.gz"
+    params:
+        logs_json = "$(dirname {output.R1})/$(basename $(dirname {output.R1})).json",
+        logs_html = "$(dirname {output.R1})/$(basename $(dirname {output.R1})).html"
+    threads: 4
+    shell:
+        """
+        fastp --thread {threads} --correction --in1 {input.R1} --in2 {input.R2} --out1 {output.R1} --out2 {output.R2} -j {params.logs_json} -h {params.logs_html}
+        """
+
+rule final_output:
+    input:
+        R1 = expand(PATH + "filtered_reads/{sample}_1_filtered.fastq.gz", sample=SAMPLES),
+        R2 = expand(PATH + "filtered_reads/{sample}_2_filtered.fastq.gz", sample=SAMPLES)
+    output:
+        report = "FASTPworked.txt"
+    shell:
+        "touch {output.report}"

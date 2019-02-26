@@ -1,0 +1,4 @@
+Building DAG of jobs...
+WildcardError in line 17 of /mnt/c/Users/angel/Desktop/PhD/Gut-microbiome-immunotherapy/Scripts/bash/Snakefile:
+Wildcards in input files cannot be determined from output files:
+'sample'

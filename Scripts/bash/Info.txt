@@ -1,0 +1,8 @@
+# Downloading data from ENA into Hebbe
+# 1. Select only fastq column from ENA study and download text file (testo.txt)
+# 2. Remove header from text file
+# 3. Remove ";" and move both paired end read URLs into one column
+# 4. Run this command to add "http://" to the URLs in the text file:
+#     sed -i '/^http:\/\//!s/^/http:\/\//' testo.txt
+# 5. Run this command to bulk download files:
+#     wget -np -nd -i /path/to/testo.txt

@@ -1,0 +1,3 @@
+WorkflowError in line 1 of /mnt/c/Users/angel/Desktop/PhD/Gut-microbiome-immunotherapy/Scripts/bash/Snakefile:
+Config file must be given as JSON or YAML with keys at top level.
+  File "/mnt/c/Users/angel/Desktop/PhD/Gut-microbiome-immunotherapy/Scripts/bash/Snakefile", line 1, in <module>
