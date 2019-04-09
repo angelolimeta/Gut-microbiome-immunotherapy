@@ -1,6 +1,14 @@
 configfile: "config.yaml"
 
-# Remember to be in gut_env enviroment in Conda before running Snakemake
+# Remember to be in motus enviroment in Conda before running Snakemake
+# source activate /c3se/NOBACKUP/users/angelol/motus
+
+# Required packages:
+# conda install -c bioconda fastp
+# conda install -c bioconda -c conda-forge snakemake-minimal
+# conda install -c bioconda motus
+
+
 import os
 import glob
 
