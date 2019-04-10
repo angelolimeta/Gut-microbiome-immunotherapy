@@ -2,4 +2,4 @@
 paths:
   raw_reads: /c3se/NOBACKUP/users/angelol/data/fastqfiles/
   filtered_reads: /c3se/NOBACKUP/users/angelol/data/filtered_reads/
-  motusfiles: c3se/NOBACKUP/users/angelol/data/motusfiles/
+  motusfiles: /c3se/NOBACKUP/users/angelol/data/motusfiles/

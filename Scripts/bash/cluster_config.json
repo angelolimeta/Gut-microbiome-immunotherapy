@@ -7,7 +7,7 @@
         "cpusPerTask" : 8,
         "partition" : "hebbe",
         "mail-type" : "END,FAIL",
-        "mail-user" : "$USER@chalmers.se",
+        "mail-user" : "angelol@chalmers.se",
         "name"      : "DL.{rule}",
         "output"    : "out.txt",
         "error"     : "out.txt",
