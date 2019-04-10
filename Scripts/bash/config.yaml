@@ -1,3 +1,5 @@
 #NOTE: INCLUDE / AT END OF EACH PATH!
 paths:
-  raw_reads: /c3se/NOBACKUP/users/angelol/data/
+  raw_reads: /c3se/NOBACKUP/users/angelol/data/fastqfiles/
+  filtered_reads: /c3se/NOBACKUP/users/angelol/data/filtered_reads/
+  motusfiles: c3se/NOBACKUP/users/angelol/data/motusfiles/
