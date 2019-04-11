@@ -20,6 +20,6 @@ All studies utilize metagenomic sequencing through either **Whole Genome Shotgun
 | Study                 | Responders | Non-responders | Total | Sequencing Method       | Database | ID         |
 |-----------------------|-----------:|---------------:|------:|:-----------------------:|----------|:----------:|
 | Gopalakrishnan et al. |         14 |             11 |    25 |   Illumina HiSeq 2000   | ENA      | PRJEB22893 |
-| Matson et al.         |         16 |             26 |    42(39) |   Illumina HiSeq 2000   | SRA      |  SRP116709 |
+| Matson et al.         |         16 |             26 | 42(39)|  Illumina NextSeq 500   | SRA      |  SRP116709 |
 | Routy et al.          |          ? |              ? |   100 | Thermofisher Ion Proton | ENA      | PRJEB22863 |
 | Frankel et al.        |         24 |              9 |    33 |   Illumina HiSeq 2000   | SRA      |  SRP115355 |
