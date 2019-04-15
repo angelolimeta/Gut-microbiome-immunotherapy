@@ -23,3 +23,7 @@ All studies utilize metagenomic sequencing through either **Whole Genome Shotgun
 | Matson et al.         |         16 |             26 | 42(39)|  Illumina NextSeq 500   | SRA      |PRJNA399742 |
 | Routy et al.          |          ? |              ? |   100 | Thermofisher Ion Proton | ENA      | PRJEB22863 |
 | Frankel et al.        |         24 |              9 |    33 |   Illumina HiSeq 2000   | SRA      |PRJNA397906 |
+
+### Response Criteria
+
+Treatment response is evaluated through the **Response Evaluation Criteria in Solid Tumors 1.1 (RECIST 1.1)**. Patients with **complete** or **partial** response, according to RECIST 1.1 criteria, are classified as responders; whereas patients with **stable** or **progressive** disease are classified as non-responders.
