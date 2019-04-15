@@ -1,0 +1,40 @@
+Patient Identifier	Sex	Age	Site of Metastases	ICT Therapy	Change in Tumor Size (%)	RECIST Category
+P7	M	63	Lung	IN	−4	Stable
+P8	M	70	Lung	IN	−55	Response
+P10	M	75	Lung	IN	−83	Response
+P14	F	69	Lung	IN	−60	Response
+P16	M	80	Lung, Nodes	P	53	Progression
+P17	M	68	Nodes	N	−70	Response
+P22	M	64	Lung, Liver	P	81	Progression
+P23	M	76	Lung	IN	−55	Response
+P24	M	44	Nodes	IN	136	Progression
+P25	F	60	SQ	IN	−100	Response
+P28	F	68	Lung, Liver	IN	85	Progression
+P30	M	54	Lung, Liver	IN	100	Progression
+P32	F	57	Nodes, Bone	IN	100	Progression
+P33	F	74	Nodes	P	−36	Response
+P34	M	57	Liver	IN	−66	Response
+P35	M	63	Nodes	IN	−30	Response
+P39	M	48	Nodes, SQ	P	−68	Response
+P42	M	67	SQ	P	100	Progression
+P44	F	63	Nodes	P	−27	Stable
+P45	M	43	Lung, Nodes, SQ	P	−14	Stable
+P46	M	68	SQ, Adrenal	IN	116	Progression
+P48	M	86	Lung	P	0	Stable
+P49	M	84	Lung, Liver, Nodes	P	125	Progression
+P52	M	41	Bone	IN	−100	Response
+P53	M	74	Lung, Adrenal	IN	100	Progression
+P54	M	79	Nodes, SQ	IN	100	Progression
+P55	F	37	SQ, Adrenal	IN	−100	Response
+P56	M	66	Lung, Nodes	P	46	Progression
+P57	M	70	Liver	I	−100	Response
+P58	M	52	Nodes	P	−48	Response
+P59	M	78	Lung	IN	−10	Stable
+P61	M	58	Lung	IN	−40	Response
+P63	M	63	Nodes, SQ	IN	−100	Response
+P64	F	77	Lung, Liver, Bone	P	100	Progression
+P65	M	69	Liver	P	131	Progression
+P66	M	80	Lung, Nodes	IN	61	Progression
+P67	M	83	Lung	IN	−34	Response
+P68	M	92	Lung	IN	−34	Response
+P69	F	55	Lung	IN	−87	Response

@@ -1,0 +1,23 @@
+rule motus2:
+    input:
+        R1 = PATH + "filtered_reads/{sample}_1_filtered.fastq.gz",
+        R2 = PATH + "filtered_reads/{sample}_2_filtered.fastq.gz"
+    output:
+        PATH + "motusfiles/{sample}.motus",
+    params:
+        logs_json = "$(dirname {output.R1})/$(basename $(dirname {output.R1})).json",
+        logs_html = "$(dirname {output.R1})/$(basename $(dirname {output.R1})).html"
+    threads: 4
+    shell:
+        """
+        motus profile -t {threads}
+        """
+
+rule final_output_fastp:
+    input:
+        R1 = expand(PATH + "filtered_reads/{sample}_1_filtered.fastq.gz", sample=SAMPLES),
+        R2 = expand(PATH + "filtered_reads/{sample}_2_filtered.fastq.gz", sample=SAMPLES)
+    output:
+        report = "FASTPworked.txt"
+    shell:
+        "touch {output.report}"

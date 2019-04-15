@@ -1,7 +1,5 @@
 library(readr)
 
-#
-
 # PRJEB22863
 PRJEB22863 <- data.frame(read_delim("~/Documents/PhD/Gut-microbiome-immunotherapy/files2download/PRJEB22863_meta.txt", 
                          "\t", escape_double = FALSE, trim_ws = TRUE))

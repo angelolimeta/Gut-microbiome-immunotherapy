@@ -1,0 +1,487 @@
+---
+title: "main"
+author: "Angelo Limeta, Alex Hedin, Carolina Sanchez, Francisco Zorrilla"
+date: "2/27/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+ 
+** Commands used to download data from ebi metagenomics database **
+
+
+```{r }
+
+list2dowload = read.delim("mg_project_summary_20180222.csv", header = T, sep = ",")
+library(stringr)
+
+samples = grep(unique(str_replace(list.files("./Project/"), pattern =  "_\\d+.fastq$", replacement = "")), 
+     pattern = "autismMap.txt", value = T, invert = T)
+
+system("mkdir -p ./processed_samples")
+for (i in 1:nrow(list2dowload) ){
+  #print(paste(list2dowload[i, "Sample.ID"], list2dowload[i, "Run.ID"]))
+  command = paste("wget -O ", "./processed_samples/" , list2dowload[i, "Sample.ID"], ".gz ", "https://www.ebi.ac.uk/metagenomics/projects/SRP097646/samples/", 
+        list2dowload[i, "Sample.ID"], "/runs/", list2dowload[i, "Run.ID"], "/results/versions/4.1/sequences/ProcessedReads/chunks/1", sep = "")
+  #print(command)
+  system(command = command)
+  
+}
+```
+
+** Commands used to indetify unique sequences and cluster into OTUs using UPARSE**
+
+
+```{r }
+
+list = data.frame(list2download[,3])
+
+system("mkdir -p ./uniqueOTU")
+system("mkdir -p ./OTUclusters")
+
+for (i in 1:nrow(list) ){
+  
+  setwd("~/uniqueOTU")
+  command = paste("usearch -fastx_uniques ~/processed_samples/", list[i, 1], " -fastaout ", list[i, 1], ".fa ",  
+                  "-sizeout -relabel Uniq ", sep = "")
+
+  system(command = command)
+  
+  setwd("~/OTUclusters")
+  command = paste("usearch -cluster_otus ~/uniqueOTU/", list[i, 1],".fa", " -otus ", list[i, 1], "otu.fa ",  
+                  "-relabel Otu ", sep = "")
+  
+  #print(command)
+  system(command = command)
+}
+
+
+```
+
+** Commands used to classify OTUs using the RDPTools classifier**
+
+```{r }
+
+sampleNameID = list2dowload[,c(1,3)]
+
+system("mkdir -p ./classified_samples")
+setwd("~/classified_samples")  
+system("mkdir -p ./classified_samples/class")
+system("mkdir -p ./classified_samples/hier")
+
+for (i in 1:nrow(sampleNameID) ){
+
+  #print(paste(list2dowload[i, "Sample.ID"], list2dowload[i, "Run.ID"]))
+  command = paste("java -Xmx1g -jar /home/student6/RDPTools/classifier.jar classify -o /home/student6/classified_samples/class/", sampleNameID[i, 1], 
+                  "_class.txt -h /home/student6/classified_samples/hier/",sampleNameID[i, 1],"_hier.txt /home/student6/OTUclusters/", 
+                  sampleNameID[i, 2], "otu.fa", sep = "")
+  print(command)
+  system(command = command)
+}
+
+
+```
+
+
+** Phylogenetic analysis using Phyloseq package**
+
+*PCA *
+
+```{r }
+
+setwd("~/classified2/cnmerged") #go to folder containing merged hier. files by group
+
+APla = read.table (file = "cn_A_Pla_merged.txt", header = TRUE, sep = "\t") 
+ASal = read.table (file = "cn_A_Sal_merged.txt", header = TRUE, sep = "\t")
+HPla = read.table (file = "cn_H_Pla_merged.txt", header = TRUE, sep = "\t")
+HSal = read.table (file = "cn_H_Sal_merged.txt", header = TRUE, sep = "\t")
+
+#note: we are loading the copy number adjusted hier. files to do this MDS analysis
+
+#Extract phylum counts
+
+APla_phyl=APla[APla[,"rank"]=="phylum",]
+ASal_phyl=ASal[ASal[,"rank"]=="phylum",]
+HPla_phyl=HPla[HPla[,"rank"]=="phylum",]
+HSal_phyl=HSal[HSal[,"rank"]=="phylum",]
+
+require(ade4)
+group <- factor(c(rep("APla",26),rep("ASal",32),rep("HPla",26),rep("HSal",27)),levels = c("APla","ASal","HPla","HSal"))
+testy = rbind.fill(APla_phyl,ASal_phyl,HPla_phyl,HSal_phyl)
+testy[is.na(testy)] = 0
+testo = ddply(testy,"name",numcolwise(sum))
+#Transpose the data
+countsForPCA = t(testo[,3:113])
+
+#Perform PCA on the counts
+pcar <- dudi.pca(countsForPCA, center = TRUE, scale = FALSE, scannf = FALSE, nf=5)
+
+#Check how much of the total variance each principal component accounts for:
+var <- pcar$eig/sum(pcar$eig)*100
+plot(var, type = 'b')
+
+#Plot factorial map with representation of observations in the 1st 2 components:
+
+#x11();
+s.class(pcar$li[,1:2],group, cpoint = 1, col = c('orange','red','blue','green'))
+
+
+
+```
+
+
+*Richness*
+```{r}
+rm(list = ls())
+
+#Read in text files to tables
+
+setwd("~/classified2/merged")
+
+APla = read.table (file = "A_Pla_Merged.txt", header = TRUE, sep = "\t")
+APla = APla[,5:30]
+
+ASal = read.table (file = "A_Sal_Merged.txt", header = TRUE, sep = "\t")
+ASal = ASal[,5:36]
+
+HPla = read.table (file = "H_Pla_Merged.txt", header = TRUE, sep = "\t")
+HPla = HPla[,5:30]
+
+HSal = read.table (file = "H_Sal_Merged.txt", header = TRUE, sep = "\t")
+HSal = HSal[,5:31]
+
+## Convert data to phyloseq object
+
+APla = hier2phyloseq("A_Pla_Merged.txt")
+ASal = hier2phyloseq("A_Sal_Merged.txt")
+HPla = hier2phyloseq("H_Pla_Merged.txt")
+HSal = hier2phyloseq("H_Sal_Merged.txt")
+
+# Plot richness for each group and save data
+
+plot_richness(APla)
+APlaRich = plot_richness(APla)
+
+plot_richness(ASal)
+ASalRich = plot_richness(ASal)
+
+plot_richness(HPla)
+HPlaRich = plot_richness(HPla)
+
+plot_richness(HSal)
+HSalRich = plot_richness(HSal)
+
+# Save diversity indeces tables 
+
+APlaInd = APlaRich[["plot_env"]][["DF"]]
+ASalInd = ASalRich[["plot_env"]][["DF"]]
+HPlaInd = HPlaRich[["plot_env"]][["DF"]]
+HSalInd = HSalRich[["plot_env"]][["DF"]]
+
+# Average of indices per group 
+
+APlaIndMean = colMeans(APlaInd[,c(2,4,6,7,9)]) #gets Chao1, ACE, Shannon, Simpson, Fisher
+ASalIndMean = colMeans(ASalInd[,c(2,4,6,7,9)])
+HPlaIndMean = colMeans(HPlaInd[,c(2,4,6,7,9)])
+HSalIndMean = colMeans(HSalInd[,c(2,4,6,7,9)])
+
+
+#Standard deviation
+APlaIndSem=apply(as.matrix(APlaInd[,c(2,4,6,7,9)]),2,sd)
+HPlaIndSem=apply(as.matrix(HPlaInd[,c(2,4,6,7,9)]),2,sd)
+ASalIndSem=apply(as.matrix(ASalInd[,c(2,4,6,7,9)]),2,sd)
+HSalIndSem=apply(as.matrix(HSalInd[,c(2,4,6,7,9)]),2,sd)
+
+#Matix
+ACE=c(ASalIndMean[2],HSalIndMean[2],APlaIndMean[2],HPlaIndMean[2])
+ACEsd=c(ASalIndSem[2],HSalIndSem[2],APlaIndSem[2],HPlaIndSem[2])
+Patients =factor(c("AS","HS","AP","HP"), levels = c("AS","HS","AP","HP"))
+
+ACEall=cbind(data.frame(ACE),data.frame(ACEsd),data.frame(Patients))
+
+Shannon=c(ASalIndMean[3],HSalIndMean[3],APlaIndMean[3],HPlaIndMean[3])
+Shansd=c(ASalIndSem[3],HSalIndSem[3],APlaIndSem[3],HPlaIndSem[3])
+names =factor(c("AS","HS","AP","HP"), levels = c("AS","HS","AP","HP"))
+
+Shan=cbind(data.frame(Shannon),data.frame(Shansd),data.frame(Patients))
+
+#ggplot
+library(ggplot2)
+#ACE
+dodge <- position_dodge(width = 0.9)
+limits <- aes(ymax = ACEall$ACE + ACEall$ACEsd,
+              ymin = ACEall$ACE - ACEall$ACEsd)
+
+p <- ggplot(data = ACEall, aes(x = Patients, y = ACE, fill = Patients))
+
+p + geom_bar(stat = "identity", position = dodge) +
+  geom_errorbar(limits, position = dodge, width = 0.25) +
+  scale_fill_manual(values=c("red", "green", "orange", "blue"))
+
+#p-value
+ASvsHS_a=wilcox.test(t(ASalInd[4]), t(HSalInd[4])) 
+APvsHP_a=wilcox.test(t(APlaInd[4]), t(HPlaInd[4])) 
+ASvsAP_a=wilcox.test(t(ASalInd[4]), t(APlaInd[4])) 
+HSvsHP_a=wilcox.test(t(HSalInd[4]), t(HPlaInd[4])) 
+
+p.value=rbind(ASvsHS_a[[3]],APvsHP_a[[3]],ASvsAP_a[[3]],HSvsHP_a[[3]])
+Comparison=rbind("AS vs HS","AP vs HP","AS vs AP","HS vs HP")
+p.val_a=cbind(data.frame(p.value),data.frame(Comparison))
+
+#Shannon
+dodge <- position_dodge(width = 0.9)
+limits <- aes(ymax = Shan$Shannon + Shan$Shansd,
+              ymin = Shan$Shannon - Shan$Shansd)
+
+p <- ggplot(data = Shan, aes(x=Patients , y = Shannon, fill = Patients))
+
+p + geom_bar(stat = "identity", position = "dodge") +
+  geom_errorbar(limits, position = dodge, width = 0.25) + 
+  scale_fill_manual(values=c("red", "green", "orange", "blue"))
+
+#p-value
+ASvsHS_s=wilcox.test(t(ASalInd[6]), t(HSalInd[6])) 
+APvsHP_s=wilcox.test(t(APlaInd[6]), t(HPlaInd[6])) 
+ASvsAP_s=wilcox.test(t(ASalInd[6]), t(APlaInd[6])) 
+HSvsHP_s=wilcox.test(t(HSalInd[6]), t(HPlaInd[6])) 
+
+p.value=rbind(ASvsHS_s[[3]],APvsHP_s[[3]],ASvsAP_s[[3]],HSvsHP_s[[3]])
+Comparison=rbind("AS vs HS","AP vs HP","AS vs AP","HS vs HP")
+p.val_s=cbind(data.frame(p.value),data.frame(Comparison))
+
+```
+
+*Relative Abundance for phylums*
+
+```{r}
+#Read in text files to tables
+
+#Go to this directory setwd("~/classified2/merged")
+
+APla = read.table (file = "A_Pla_Merged.txt", header = TRUE, sep = "\t")
+ASal = read.table (file = "A_Sal_Merged.txt", header = TRUE, sep = "\t")
+HPla = read.table (file = "H_Pla_Merged.txt", header = TRUE, sep = "\t")
+HSal = read.table (file = "H_Sal_Merged.txt", header = TRUE, sep = "\t")
+
+#Phylum level abundance
+
+#Extract phylum counts
+
+APla_phyl=APla[APla[,"rank"]=="phylum",]
+ASal_phyl=ASal[ASal[,"rank"]=="phylum",]
+HPla_phyl=HPla[HPla[,"rank"]=="phylum",]
+HSal_phyl=HSal[HSal[,"rank"]=="phylum",]
+
+#Convert counts to relative abundance
+APla_tot=apply(APla_phyl[,5:length(APla_phyl)], 2, sum) #Extract total counts for each sample
+APla_phyl[5:length(APla_phyl)]=APla_phyl[5:length(APla_phyl)]/APla_tot #Divide each sample by total counts for each sample
+
+ASal_tot=apply(ASal_phyl[,5:length(ASal_phyl)], 2, sum)
+ASal_phyl[5:length(ASal_phyl)]=ASal_phyl[5:length(ASal_phyl)]/ASal_tot
+
+HPla_tot=apply(HPla_phyl[,5:length(HPla_phyl)], 2, sum)
+HPla_phyl[5:length(HPla_phyl)]=HPla_phyl[5:length(HPla_phyl)]/HPla_tot
+
+HSal_tot=apply(HSal_phyl[,5:length(HSal_phyl)], 2, sum)
+HSal_phyl[5:length(HSal_phyl)]=HSal_phyl[5:length(HSal_phyl)]/HSal_tot
+
+#Calculate mean relative abundance for each group
+APla_mean=data.frame(apply(APla_phyl[,5:length(APla_phyl)], 1, mean))
+rownames(APla_mean)=APla_phyl[,3]
+colnames(APla_mean)="Relative Abundance"
+
+ASal_mean=data.frame(apply(ASal_phyl[,5:length(ASal_phyl)], 1, mean))
+rownames(ASal_mean)=ASal_phyl[,3]
+colnames(ASal_mean)="Relative Abundace"
+
+HPla_mean=data.frame(apply(HPla_phyl[,5:length(HPla_phyl)], 1, mean))
+rownames(HPla_mean)=HPla_phyl[,3]
+colnames(HPla_mean)="Relative Abundance"
+
+HSal_mean=data.frame(apply(HSal_phyl[,5:length(HSal_phyl)], 1, mean))
+rownames(HSal_mean)=HSal_phyl[,3]
+colnames(HSal_mean)="Relative Abundace"
+
+#Standard deviation
+APla_sd=data.frame(apply(as.matrix(APla_phyl[,5:length(APla_phyl)]),1,sd))
+rownames(APla_sd)=APla_phyl[,3]
+colnames(APla_sd)="Relative Abundance"
+
+HPla_sd=data.frame(apply(as.matrix(HPla_phyl[,5:length(HPla_phyl)]),1,sd))
+rownames(HPla_sd)=HPla_phyl[,3]
+colnames(HPla_sd)="Relative Abundance"
+
+ASal_sd=data.frame(apply(as.matrix(ASal_phyl[,5:length(ASal_phyl)]),1,sd))
+rownames(ASal_sd)=ASal_phyl[,3]
+colnames(ASal_sd)="Relative Abundance"
+
+HSal_sd=data.frame(apply(as.matrix(HSal_phyl[,5:length(HSal_phyl)]),1,sd))
+rownames(HSal_sd)=HSal_phyl[,3]
+colnames(HSal_sd)="Relative Abundance"
+
+
+#Plotting data
+## Plaque
+
+APla_plot=cbind(rownames(APla_mean),APla_mean,APla_sd,c(rep("AP",length(APla_mean))))
+colnames(APla_plot)=c("Phyla","RelativeAbundance","Sd","Sample")
+APla_plot=APla_plot[order(rownames(APla_plot)), ,drop=FALSE]
+
+HPla_plot=cbind(rownames(HPla_mean),HPla_mean,HPla_sd,c(rep("HP",length(HPla_mean))))
+colnames(HPla_plot)=c("Phyla","RelativeAbundance","Sd","Sample")
+HPla_plot=HPla_plot[order(rownames(HPla_plot)), ,drop=FALSE]
+
+Pla_plot=rbind(APla_plot,HPla_plot)
+
+## Saliva
+ASal_plot=cbind(rownames(ASal_mean),ASal_mean,ASal_sd,c(rep("AS",length(ASal_mean))))
+colnames(ASal_plot)=c("Phyla","RelativeAbundance","Sd","Sample")
+ASal_plot=ASal_plot[order(rownames(ASal_plot)), ,drop=FALSE]
+
+HSal_plot=cbind(rownames(HSal_mean),HSal_mean,HSal_sd,c(rep("HS",length(HSal_mean))))
+colnames(HSal_plot)=c("Phyla","RelativeAbundance","Sd","Sample")
+HSal_plot=HSal_plot[order(rownames(HSal_plot)), ,drop=FALSE]
+
+Sal_plot=rbind(ASal_plot,HSal_plot)
+
+#ggplot
+library(ggplot2)
+
+##Plaque
+Pla_plot=Pla_plot[Pla_plot$RelativeAbundance>0.005,]
+ggplot(Pla_plot, aes(x=Phyla, y=RelativeAbundance, fill=Sample)) +
+  geom_bar(position=position_dodge(), stat="identity") +
+  geom_errorbar(aes(ymin=Pla_plot$RelativeAbundance-Pla_plot$Sd, ymax=Pla_plot$RelativeAbundance+Pla_plot$Sd), width=.2,position=position_dodge(.9)) +
+  scale_fill_manual(values=c("orange","blue")) + theme(axis.text.x = element_text(angle = 70, hjust = 1))
+
+#Saliva
+Sal_plot=Sal_plot[Sal_plot$RelativeAbundance>0.005,]
+ggplot(Sal_plot, aes(x=Phyla, y=RelativeAbundance, fill=Sample)) +
+  geom_bar(position=position_dodge(), stat="identity") +
+  geom_errorbar(aes(ymin=Sal_plot$RelativeAbundance-Sal_plot$Sd, ymax=Sal_plot$RelativeAbundance+Sal_plot$Sd), width=.2,position=position_dodge(.9)) +
+  scale_fill_manual(values=c("red","green")) + theme(axis.text.x = element_text(angle = 70, hjust = 1))
+```
+
+*Relative Abundance for genus*
+
+``` {r}
+
+#Read in text files to tables
+
+setwd("~/classified2/merged")
+
+APla = read.table (file = "A_Pla_Merged.txt", header = TRUE, sep = "\t")
+ASal = read.table (file = "A_Sal_Merged.txt", header = TRUE, sep = "\t")
+HPla = read.table (file = "H_Pla_Merged.txt", header = TRUE, sep = "\t")
+HSal = read.table (file = "H_Sal_Merged.txt", header = TRUE, sep = "\t")
+
+#Genus level abundance
+
+#Extract genus counts
+
+APla_genus=APla[APla[,"rank"]=="genus",]
+ASal_genus=ASal[ASal[,"rank"]=="genus",]
+HPla_genus=HPla[HPla[,"rank"]=="genus",]
+HSal_genus=HSal[HSal[,"rank"]=="genus",]
+
+#Convert counts to relative abundance
+APla_tot=apply(APla_genus[,5:length(APla_genus)], 2, sum) #Extract total counts for each sample
+APla_genus[5:length(APla_genus)]=APla_genus[5:length(APla_genus)]/APla_tot #Divide each sample by total counts for each sample
+
+ASal_tot=apply(ASal_genus[,5:length(ASal_genus)], 2, sum)
+ASal_genus[5:length(ASal_genus)]=ASal_genus[5:length(ASal_genus)]/ASal_tot
+
+HPla_tot=apply(HPla_genus[,5:length(HPla_genus)], 2, sum)
+HPla_genus[5:length(HPla_genus)]=HPla_genus[5:length(HPla_genus)]/HPla_tot
+
+HSal_tot=apply(HSal_genus[,5:length(HSal_genus)], 2, sum)
+HSal_genus[5:length(HSal_genus)]=HSal_genus[5:length(HSal_genus)]/HSal_tot
+
+#Calculate mean relative abundannce for each group
+APla_mean=data.frame(apply(APla_genus[,5:length(APla_genus)], 1, mean))
+rownames(APla_mean)=APla_genus[,3]
+colnames(APla_mean)="Relative Abundance"
+
+ASal_mean=data.frame(apply(ASal_genus[,5:length(ASal_genus)], 1, mean))
+rownames(ASal_mean)=ASal_genus[,3]
+colnames(ASal_mean)="Relative Abundance"
+
+HPla_mean=data.frame(apply(HPla_genus[,5:length(HPla_genus)], 1, mean))
+rownames(HPla_mean)=HPla_genus[,3]
+colnames(HPla_mean)="Relative Abundance"
+
+HSal_mean=data.frame(apply(HSal_genus[,5:length(HSal_genus)], 1, mean))
+rownames(HSal_mean)=HSal_genus[,3]
+colnames(HSal_mean)="Relative Abundance"
+
+#Standard deviation
+APla_sd=data.frame(apply(as.matrix(APla_genus[,5:length(APla_genus)]),1,sd))
+rownames(APla_sd)=APla_genus[,3]
+colnames(APla_sd)="Relative Abundance"
+
+HPla_sd=data.frame(apply(as.matrix(HPla_genus[,5:length(HPla_genus)]),1,sd))
+rownames(HPla_sd)=HPla_genus[,3]
+colnames(HPla_sd)="Relative Abundace"
+
+ASal_sd=data.frame(apply(as.matrix(ASal_genus[,5:length(ASal_genus)]),1,sd))
+rownames(ASal_sd)=ASal_genus[,3]
+colnames(ASal_sd)="Relative Abundance"
+
+HSal_sd=data.frame(apply(as.matrix(HSal_genus[,5:length(HSal_genus)]),1,sd))
+rownames(HSal_sd)=HSal_genus[,3]
+colnames(HSal_sd)="Relative Abundance"
+
+#Plotting data
+## Plaque
+
+APla_plot=cbind(rownames(APla_mean),APla_mean,APla_sd,c(rep("AP",length(APla_mean))))
+colnames(APla_plot)=c("Genus","RelativeAbundance","Sd","Sample")
+APla_plot=APla_plot[order(rownames(APla_plot)), ,drop=FALSE]
+
+HPla_plot=cbind(rownames(HPla_mean),HPla_mean,HPla_sd,c(rep("HP",length(HPla_mean))))
+colnames(HPla_plot)=c("Genus","RelativeAbundance","Sd","Sample")
+HPla_plot=HPla_plot[order(rownames(HPla_plot)), ,drop=FALSE]
+
+Pla_plot=rbind(APla_plot,HPla_plot)
+
+## Saliva
+ASal_plot=cbind(rownames(ASal_mean),ASal_mean,ASal_sd,c(rep("AS",length(ASal_mean))))
+colnames(ASal_plot)=c("Genus","RelativeAbundance","Sd","Sample")
+ASal_plot=ASal_plot[order(rownames(ASal_plot)), ,drop=FALSE]
+
+HSal_plot=cbind(rownames(HSal_mean),HSal_mean,HSal_sd,c(rep("HS",length(HSal_mean))))
+colnames(HSal_plot)=c("Genus","RelativeAbundance","Sd","Sample")
+HSal_plot=HSal_plot[order(rownames(HSal_plot)), ,drop=FALSE]
+
+Sal_plot=rbind(ASal_plot,HSal_plot)
+
+#ggplot
+library(ggplot2)
+
+##Plaque
+Pla=Pla_plot[Pla_plot$RelativeAbundance>0.02,] #Remove all under 0.02
+Pla<-Pla[!(Pla$Genus=="Saccharibacteria_genera_incertae_sedis"),] #Remove those tha has not a genus
+
+ggplot(Pla, aes(x=Genus, y=RelativeAbundance, fill=Sample)) +
+  geom_bar(position=position_dodge(), stat="identity") +
+  geom_errorbar(aes(ymin=Pla$RelativeAbundance-Pla$Sd, ymax=Pla$RelativeAbundance+Pla$Sd), width=.2,position=position_dodge(.9)) +
+  scale_fill_manual(values=c("orange","blue")) + theme(axis.text.x = element_text(angle = 70, hjust = 1)) 
+
+#Saliva
+Sal=Sal_plot[Sal_plot$RelativeAbundance>0.02,] #remove all under 0.02
+Sal<-Sal[!(Sal$Genus=="Saccharibacteria_genera_incertae_sedis"),] #remove those that has not a genus
+ggplot(Sal, aes(x=Genus, y=RelativeAbundance, fill=Sample)) +
+  geom_bar(position=position_dodge(), stat="identity") +
+  geom_errorbar(aes(ymin=Sal$RelativeAbundance-Sal$Sd, ymax=Sal$RelativeAbundance+Sal$Sd), width=.2,position=position_dodge(.9)) +
+  scale_fill_manual(values=c("red","green")) + theme(axis.text.x = element_text(angle = 70, hjust = 1))
+
+```
