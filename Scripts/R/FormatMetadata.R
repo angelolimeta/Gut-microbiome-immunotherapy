@@ -110,6 +110,17 @@ for (i in 1:nrow(clin)) {
     Sample_id[i] = Mat_sampInfo$run_accession[which(gsub("P","",clin$Study_patient_id[i]) == gsub(".*_","",Mat_sampInfo$sample_alias))]
   }
   if(clin$Study[i] == "Frankel et al"){
-    Sample_id[i] = Fra_sampInfo$run_accession[which(gsub("P","",clin$Study_patient_id[i]) == gsub(".*_","",Fra_sampInfo$sample_alias))]
+    Sample_id[i] = Fra_sampInfo$run_accession[which(clin$Study_patient_id[i] == Fra_sampInfo$sample_alias)]
   }
 }
+clin = cbind(Sample_id,clin)
+
+# Convert all columns into character vectors
+clin = data.frame(lapply(clin, as.character), stringsAsFactors=FALSE)
+# Response can be kept as a factor
+clin$Response = as.factor(clin$Response)
+
+# == SAVE DATA ==
+
+# Metadata (clinical) is saved as a .rds file (clin.rds)
+saveRDS(clin, file = "/Users/angelol/Documents/PhD/Gut-microbiome-immunotherapy/Metadata/Processed_metadata/clin.rds")
