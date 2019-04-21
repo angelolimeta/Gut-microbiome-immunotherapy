@@ -73,17 +73,18 @@ Fra_meta$Treatment[which(Fra_meta$Treatment == "N")] = "Anti-PD1"
 clin = rbind(Gop_meta,Mat_meta,Fra_meta)
 rownames(clin) = NULL
 
-# Create unique identifier for each patient
+# Create unique identifier for each patient, e.g p001_Gop_NR
 Patient_id = vector(mode="character", length=nrow(clin))
 for (i in 1:nrow(clin)) {
   if(clin$Study[i] == "Gopalakrishnan et al"){
-    Patient_id[i] = paste("p",i,"_Gop_",clin$Response[i],sep = "")
+    # sprintf("%03d",i) formats numbers as fixed width, with leading zeros
+    Patient_id[i] = paste("p",sprintf("%03d",i),"_Gop_",clin$Response[i],sep = "")
   }
   if(clin$Study[i] == "Matson et al"){
-    Patient_id[i] = paste("p",i,"_Mat_",clin$Response[i],sep = "")
+    Patient_id[i] = paste("p",sprintf("%03d",i),"_Mat_",clin$Response[i],sep = "")
   }
   if(clin$Study[i] == "Frankel et al"){
-    Patient_id[i] = paste("p",i,"_Fra_",clin$Response[i],sep = "")
+    Patient_id[i] = paste("p",sprintf("%03d",i),"_Fra_",clin$Response[i],sep = "")
   }
   
 }
