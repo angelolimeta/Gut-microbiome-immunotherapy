@@ -1,4 +1,5 @@
 library(phyloseq)
+library(ape)
 
 # ==== IMPORT DATA ====
 
@@ -8,6 +9,8 @@ OTU = readRDS("/Users/angelol/Documents/PhD/Gut-microbiome-immunotherapy/data/Ab
 clin = readRDS("/Users/angelol/Documents/PhD/Gut-microbiome-immunotherapy/Metadata/Processed_metadata/clin.rds")
 # Pyholgenetic metadata
 phylo_meta = readRDS("/Users/angelol/Documents/PhD/Gut-microbiome-immunotherapy/Metadata/Processed_metadata/phylo_meta.rds")
+# Tree file
+mOTUs_tree = read.tree(file = "/Users/angelol/Documents/PhD/Gut-microbiome-immunotherapy/data/Tree_files/mOTUs.treefile")
 
 # ==== CONVERT INTO PHYLOSEQ ====
 
@@ -33,6 +36,8 @@ for (i in 1:nrow(taxmat)) {
 TAX_phylo = tax_table(taxmat)
 # Create phyloseq object
 physeq = phyloseq(OTU_phylo, TAX_phylo)
+# Add phylogenetic tree info
+physeq = merge_phyloseq(physeq,mOTUs_tree)
 
 # ==== SAVE DATA ====
 
