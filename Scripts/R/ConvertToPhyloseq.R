@@ -38,6 +38,12 @@ TAX_phylo = tax_table(taxmat)
 physeq = phyloseq(OTU_phylo, TAX_phylo)
 # Add phylogenetic tree info
 physeq = merge_phyloseq(physeq,mOTUs_tree)
+# Add clinical data
+rownames(clin) = clin$Patient_id
+clin = clin[,-2]
+sampledata = sample_data(clin)
+physeq = merge_phyloseq(physeq,sampledata)
+
 
 # ==== SAVE DATA ====
 
