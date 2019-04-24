@@ -17,7 +17,6 @@ OTU = cbind(Gop_OTU, Mat_OTU[,-c(1,2,3)], Fra_OTU[,-c(1,2,3)])
 phylo_meta = OTU[,c(1,2,3)]
 rownames(phylo_meta) = phylo_meta[,1]
 phylo_meta = phylo_meta[,-1]
-phylo_meta = data.frame(lapply(phylo_meta, as.character), stringsAsFactors=FALSE)
 
 # Only keep relative abundances in OTU data frame
 rownames(OTU) = OTU[,1]
