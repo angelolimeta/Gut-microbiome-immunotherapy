@@ -52,6 +52,7 @@ dcols1 <- "euclidean"
 # Create annotations for heatmap
 hm.rows = data.frame(Taxonomy = as.character(gsub(".*s__","",diffOTUs$taxonomy)))
 hm.cols = data.frame(Response = gsub(".*_R","R",gsub(".*_NR","NR",colnames(OTU))))
+hm.cols$Response = factor(hm.cols$Response,levels(hm.cols$Response)[c(2,1)])
 rownames(hm.cols) = colnames(OTU_filtered)
 # Create heatmap
 # type "?pheatmap()" for more help
@@ -59,7 +60,7 @@ rownames(hm.cols) = colnames(OTU_filtered)
 test = pheatmap(hm.data,
          kmeans_k = NA,
          show_rownames = TRUE, show_colnames = TRUE,
-         main = "Top differentially abundant OTUs, -log10(relative abundance)",
+         main = "Top differentially abundant OTUs, log10(relative abundance)",
          clustering_method = "average",
          cluster_rows = TRUE, cluster_cols = TRUE,
          clustering_distance_rows = drows1, 
@@ -115,12 +116,13 @@ for (i in 1:length(studies)) {
     # Create annotations for heatmap
     hm.rows = data.frame(Taxonomy = as.character(gsub(".*s__","",diffOTUs_study$taxonomy)))
     hm.cols = data.frame(Response = gsub(".*_R","R",gsub(".*_NR","NR",colnames(OTU_filtered_study))))
+    hm.cols$Response = factor(hm.cols$Response,levels(hm.cols$Response)[c(2,1)])
     rownames(hm.cols) = colnames(OTU_filtered_study)
     # Create heatmap
     p_study = pheatmap(hm.data,
                     kmeans_k = NA,
                     show_rownames = TRUE, show_colnames = TRUE,
-                    main = "Top differentially abundant OTUs, log10(relative abundance)",
+                    main = paste(studies[i]," et al.", sep = ""),
                     clustering_method = "average",
                     cluster_rows = TRUE, cluster_cols = TRUE,
                     clustering_distance_rows = drows1, 
@@ -154,7 +156,7 @@ p3 = ggplot(data = plotData, aes(x=Response,y=Abundance, color=Response)) + geom
                fill="red") +
   labs(y = "log10 normalized relative abundance", x = "") +
   labs(title = as.character(gsub(".*s__","",phylo_meta[OTUforPlot,1])))
-quartz()
+
 p3
 
 # Call ggplot
