@@ -42,7 +42,6 @@ rule fastp_filter:
     params:
         logs_json = "temp.json",
         logs_html = "temp.html"
-    threads: 4
     shell:
         """
         cp {input.R1} {input.R2} $TMPDIR
@@ -51,7 +50,7 @@ rule fastp_filter:
         inputR2=`basename {input.R2}`
         outputR1=`basename {output.R1}`
         outputR2=`basename {output.R2}`
-        fastp --thread {threads} --correction --in1 $inputR1 --in2 $inputR2 --out1 $outputR1 --out2 $outputR2 -j {params.logs_json} -h {params.logs_html}
+        fastp --thread 8 --correction --in1 $inputR1 --in2 $inputR2 --out1 $outputR1 --out2 $outputR2 -j {params.logs_json} -h {params.logs_html}
         cp $outputR1 $outputR2 {config[paths][filtered_reads]}
         """
 
@@ -61,7 +60,6 @@ rule calculate_abundances:
         R2 = config["paths"]["filtered_reads"] + "{sample}_2_filtered.fastq.gz"
     output:
         config["paths"]["motusfiles"] + "{sample}.motus"
-    threads: 4
     shell:
         """
         cp {input.R1} {input.R2} $TMPDIR
@@ -69,7 +67,7 @@ rule calculate_abundances:
         inputR1=`basename {input.R1}`
         inputR2=`basename {input.R2}`
         output=`basename {output}`
-        motus profile -f $inputR1 -r $inputR2 -o $output -n {wildcards.sample} -t {threads} -q -p
+        motus profile -f $inputR1 -r $inputR2 -o $output -n {wildcards.sample} -t 8 -q -p
         cp $output {config[paths][motusfiles]}
         """
 # Run motus merge -d $motus_directory on the produced files
