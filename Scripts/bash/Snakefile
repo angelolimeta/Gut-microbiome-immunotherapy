@@ -1,7 +1,7 @@
 configfile: "config.yaml"
 
 # Remember to be in motus enviroment in Conda before running Snakemake
-# source activate /c3se/NOBACKUP/users/angelol/motus
+# source activate /c3se/NOBACKUP/users/angelol/main_env
 
 # Required packages:
 # conda install -c bioconda fastp
@@ -12,10 +12,10 @@ configfile: "config.yaml"
 import os
 import glob
 
-PATH = "/c3se/NOBACKUP/users/angelol/data/"
+PATH = "/c3se/NOBACKUP/groups/c3-c3se605-19-3/data/"
 
 # Extract sample names
-PATH_fastq = "/c3se/NOBACKUP/users/angelol/data/" + 'fastqfiles/*'
+PATH_fastq = "/c3se/NOBACKUP/groups/c3-c3se605-19-3/data/" + 'fastqfiles/*'
 SAMPLES = sorted([os.path.splitext(val)[0] for val in (glob.glob(PATH_fastq))]) #Remove .gz from filename path
 SAMPLES = [os.path.splitext(val)[0] for val in SAMPLES]
 SAMPLES = [os.path.basename(val) for val in SAMPLES]
@@ -67,7 +67,7 @@ rule calculate_abundances:
         inputR1=`basename {input.R1}`
         inputR2=`basename {input.R2}`
         output=`basename {output}`
-        motus profile -f $inputR1 -r $inputR2 -o $output -n {wildcards.sample} -t 8 -q -p
+        motus profile -f $inputR1 -r $inputR2 -o $output -n {wildcards.sample} -t 8 -q -p -c
         cp $output {config[paths][motusfiles]}
         """
 # Run motus merge -d $motus_directory on the produced files
