@@ -116,10 +116,12 @@ for (i in 1:nrow(clin)) {
 }
 clin = cbind(Sample_id,clin)
 
-# Convert all columns into character vectors
-clin = data.frame(lapply(clin, as.character), stringsAsFactors=FALSE)
-# Response can be kept as a factor
-clin$Response = as.factor(clin$Response)
+# Convert all columns into factors
+clin = data.frame(lapply(clin, as.factor))
+# Sample_id, Patient_id and Study_patient_id can be kept as characters
+clin[,1:3] = data.frame(lapply(clin[1:3], as.character),stringsAsFactors = FALSE)
+# Check classes of each column
+lapply(clin, class)
 
 # == SAVE DATA ==
 
