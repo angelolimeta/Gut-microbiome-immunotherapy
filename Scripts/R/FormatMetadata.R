@@ -43,12 +43,12 @@ for (i in 2:ncol(Gop_meta_full)) {
 }
 # Extract common data
 Gop_meta = Gop_meta_full[,c("subject_id","phenotype","treatment")]
-Gop_meta = cbind(Gop_meta,rep("Gopalakrishnan et al",nrow(Gop_meta)))
+Gop_meta = cbind(Gop_meta,rep("Gopalakrishnan_et_al",nrow(Gop_meta)))
 colnames(Gop_meta) = c("Study_patient_id","Response","Treatment","Study")
 
 # Mat_meta
 Mat_meta = Mat_meta_full[,c("Sample","Response")]
-Mat_meta = cbind(Mat_meta,rep("Anti-PD1",nrow(Mat_meta)),rep("Matson et al",nrow(Mat_meta)))
+Mat_meta = cbind(Mat_meta,rep("Anti-PD1",nrow(Mat_meta)),rep("Matson_et_al",nrow(Mat_meta)))
 Mat_meta$Response = gsub("NonResponder","NR",Mat_meta$Response)
 Mat_meta$Response = gsub("Responder","R",Mat_meta$Response)
 colnames(Mat_meta) = c("Study_patient_id","Response","Treatment","Study")
@@ -59,7 +59,7 @@ Mat_meta = Mat_meta[Mat_meta$Study_patient_id != "P42",]
 
 # Fra_meta
 Fra_meta = Fra_meta_full[,c("Patient.Identifier","RECIST.Category","ICT.Therapy")]
-Fra_meta = cbind(Fra_meta,rep("Frankel et al",nrow(Fra_meta)))
+Fra_meta = cbind(Fra_meta,rep("Frankel_et_al",nrow(Fra_meta)))
 colnames(Fra_meta) = c("Study_patient_id","Response","Treatment","Study")
 Fra_meta$Response = gsub("Stable","NR",Fra_meta$Response)
 Fra_meta$Response = gsub("Progression","NR",Fra_meta$Response)
@@ -76,14 +76,14 @@ rownames(clin) = NULL
 # Create unique identifier for each patient, e.g p001_Gop_NR
 Patient_id = vector(mode="character", length=nrow(clin))
 for (i in 1:nrow(clin)) {
-  if(clin$Study[i] == "Gopalakrishnan et al"){
+  if(clin$Study[i] == "Gopalakrishnan_et_al"){
     # sprintf("%03d",i) formats numbers as fixed width, with leading zeros
     Patient_id[i] = paste("p",sprintf("%03d",i),"_Gop_",clin$Response[i],sep = "")
   }
-  if(clin$Study[i] == "Matson et al"){
+  if(clin$Study[i] == "Matson_et_al"){
     Patient_id[i] = paste("p",sprintf("%03d",i),"_Mat_",clin$Response[i],sep = "")
   }
-  if(clin$Study[i] == "Frankel et al"){
+  if(clin$Study[i] == "Frankel_et_al"){
     Patient_id[i] = paste("p",sprintf("%03d",i),"_Fra_",clin$Response[i],sep = "")
   }
   
@@ -91,11 +91,11 @@ for (i in 1:nrow(clin)) {
 
 clin = cbind(Patient_id,clin)
 
-# Remove non-WGS samples from Matson et al data
+# Remove non-WGS samples from Matson_et_al data
 Mat_sampInfo = Mat_sampInfo[Mat_sampInfo$library_strategy == "WGS",]
 Mat_sampInfo = Mat_sampInfo[,-2]
 
-# Discard the 5 repeat samples within 1 month of starting ICT from the Frankel et al data.
+# Discard the 5 repeat samples within 1 month of starting ICT from the Frankel_et_al data.
 Fra_sampInfo$sample_alias = gsub("melanoma_","",Fra_sampInfo$sample_alias)
 Fra_sampInfo = Fra_sampInfo[!grepl("_",Fra_sampInfo$sample_alias),]
 
@@ -104,13 +104,13 @@ Fra_sampInfo = Fra_sampInfo[!grepl("_",Fra_sampInfo$sample_alias),]
 # Link each patient with an individual sample
 Sample_id = vector(mode="character", length=nrow(clin))
 for (i in 1:nrow(clin)) {
-  if(clin$Study[i] == "Gopalakrishnan et al"){
+  if(clin$Study[i] == "Gopalakrishnan_et_al"){
     Sample_id[i] = Gop_sampInfo$run_accession[which(clin$Study_patient_id[i] == Gop_sampInfo$sample_alias)]
   }
-  if(clin$Study[i] == "Matson et al"){
+  if(clin$Study[i] == "Matson_et_al"){
     Sample_id[i] = Mat_sampInfo$run_accession[which(gsub("P","",clin$Study_patient_id[i]) == gsub(".*_","",Mat_sampInfo$sample_alias))]
   }
-  if(clin$Study[i] == "Frankel et al"){
+  if(clin$Study[i] == "Frankel_et_al"){
     Sample_id[i] = Fra_sampInfo$run_accession[which(clin$Study_patient_id[i] == Fra_sampInfo$sample_alias)]
   }
 }
