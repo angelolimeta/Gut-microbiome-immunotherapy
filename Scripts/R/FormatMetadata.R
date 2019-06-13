@@ -64,7 +64,7 @@ colnames(Fra_meta) = c("Study_patient_id","Response","Treatment","Study")
 Fra_meta$Response = gsub("Stable","NR",Fra_meta$Response)
 Fra_meta$Response = gsub("Progression","NR",Fra_meta$Response)
 Fra_meta$Response = gsub("Response","R",Fra_meta$Response)
-Fra_meta$Treatment[which(Fra_meta$Treatment == "IN")] = "Anti-PD1 + Anti-CTLA4"
+Fra_meta$Treatment[which(Fra_meta$Treatment == "IN")] = "Anti-PD1_Anti-CTLA4"
 Fra_meta$Treatment[which(Fra_meta$Treatment == "I")] = "Anti-CTLA4"
 Fra_meta$Treatment[which(Fra_meta$Treatment == "P")] = "Anti-PD1"
 Fra_meta$Treatment[which(Fra_meta$Treatment == "N")] = "Anti-PD1"
