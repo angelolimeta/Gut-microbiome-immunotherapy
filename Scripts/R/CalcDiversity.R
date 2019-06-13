@@ -20,6 +20,8 @@ physeq = readRDS("/Users/angelol/Documents/PhD/Gut-microbiome-immunotherapy/data
 # Filter out microbes that are not identified
 physeq_f = filter_taxa(physeq, function(x) sum(x > 0) > 0, TRUE)
 
+# ==== ANALYSE ALPHA DIVERSITY ====
+
 # Plot alpha diversity
 p_full = plot_richness(physeq_f,x = "Response", measures = "Shannon", color = "Response") + 
   geom_boxplot() +
@@ -37,6 +39,19 @@ wilcox.test(R_div, NR_div, alternative = "two.sided")$p.value
 
 # Perform the analysis for all studies separately
 studies = c("Gopalakrishnan","Matson","Frankel")
+
+# Define diversity indeces to be used
+# - Shannon: Estimator of species richness and species evenness, more weight on species richness.
+# - InvSimpson: Estimator of species richness and species evenness, more weight on species evenness.
+# - ACE: Abundance-based Coverage Estimator of species richness.
+# - Chao1: Abundance-based estimator of species richness.
+
+div_index = c("Shannon","InvSimpson","ACE","Chao1")
+
+# Create empty matrix for storing pvalues for significance testing between R and NR
+pvalue_mat = data.frame(matrix(data = NA,nrow = length(studies), ncol = length(div_index)))
+rownames(pvalue_mat) = studies
+colnames(pvalue_mat) = div_index
 # Initialize empty plot list
 p_list = list()
 for (i in 1:length(studies)) {
@@ -45,20 +60,21 @@ for (i in 1:length(studies)) {
     study_id = substr(studies[i], start = 1, stop = 3)
     # Subset OTU_filtered matrix
     physeq_f_study = prune_samples(samples = grepl(study_id,sample_names(physeq_f)), physeq_f)
-    #Calculate alpha diversity
-    alpha_div_study = estimate_richness(physeq_f_study, measures = "Shannon") 
-    # Extract diversities for responders and non responders
-    R_div_study = as.numeric(alpha_div_study[grepl("_R",rownames(alpha_div_study)),1])
-    NR_div_study = as.numeric(alpha_div_study[grepl("_NR",rownames(alpha_div_study)),1])
-    # Perform wilcoxon rank sum test
-    print(studies[i])
-    print(wilcox.test(R_div_study, NR_div_study, alternative = "two.sided")$p.value)
+    for (j in 1:length(div_index)) {
+      #Calculate alpha diversity
+      alpha_div_study = estimate_richness(physeq_f_study, measures = div_index[j]) 
+      # Extract diversities for responders and non responders
+      R_div_study = as.numeric(alpha_div_study[grepl("_R",rownames(alpha_div_study)),1])
+      NR_div_study = as.numeric(alpha_div_study[grepl("_NR",rownames(alpha_div_study)),1])
+      # Perform wilcoxon rank sum test
+      pvalue_mat[i,j] <<- wilcox.test(R_div_study, NR_div_study, alternative = "two.sided")$p.value
+    }
     # Create y-axis label for grid.arrange
-    if(i==1){label = "Shannon index"}
+    if(i==1){label = "Index value"}
     else{label = ""}
-    # Plot alpha diversity
+    # Plot alpha diversity (Shannon only)
     p_study = plot_richness(physeq_f_study,x = "Response", measures = "Shannon", color = "Response") +
-      geom_boxplot() +
+      #geom_boxplot() +
       theme(legend.position = "none") +
       ylab(label) +
       xlab("")
@@ -70,9 +86,11 @@ for (i in 1:length(studies)) {
 p_list[[4]] = p_full 
 
 p_all = grid.arrange(grobs = p_list,
-                     layout_matrix = rbind(c(1, 2, 3, 4, 4),
-                                           c(1, 2, 3, 4, 4))
+                     layout_matrix = rbind(c(1, 2, 3, 4),
+                                           c(1, 2, 3, 4))
 )
+
+# ==== ANALYSE ALPHA DIVERSITY ====
 
 # ==== SAVE DATA ====
 ggsave(filename = "/Users/angelol/Documents/PhD/Gut-microbiome-immunotherapy/Figures/Diversity.svg",
