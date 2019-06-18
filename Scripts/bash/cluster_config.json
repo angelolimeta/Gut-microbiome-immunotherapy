@@ -10,7 +10,7 @@
         "mail-user" : "angelol@chalmers.se",
         "name"      : "DL.{rule}",
         "output"    : "out.txt",
-        "error"     : "out.txt",
+        "error"     : "error.txt",
 },
 }
 #nohup snakemake --use-conda -j 500 --rerun-incomplete --cluster-config cluster_config.json -c "sbatch -A {cluster.account} -t {cluster.time} -n {cluster.n} --ntasks {cluster.tasks} --cpus-per-task {cluster.cpusPerTask} --output {cluster.output} --error {cluster.error}" &
