@@ -79,13 +79,14 @@ plotData = melt(plotData)
 plotData = cbind(plotData, Response = gsub(".*_R","R",gsub(".*_NR","NR",plotData$Var2)))
 colnames(plotData) = c("mOTU","Patient","Abundance","Response")
 
-plotData = plotData[plotData$Abundance != 0,]
-plotData$Abundance = log10(plotData$Abundance + 1e-8)
-
+library("ggplot2")
+#plotData = plotData[plotData$Abundance != 0,]
+plotData$Abundance = log10(as.numeric(plotData$Abundance) + 1e-8)
 
 p_full = ggplot(data = plotData,aes(x=Response,y=Abundance,color=Response)) +
-  facet_grid(labeller = "mOTU",rows = 3, cols = 4, scales = "free") +
-  geom_violin()
+  facet_wrap(facets = "mOTU",ncol = 4, scales = "free") +
+  geom_violin() +
+  geom_jitter()
   
 p_full
 
