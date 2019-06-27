@@ -107,8 +107,13 @@ rule profileGenes:
         geneFamilies=`basename {output.geneFamilies}`
         pathCoverage=`basename {output.pathCoverage}`
         pathAbundance=`basename {output.pathAbundance}`
-        humann2 --input $input --output $TMPDIR --nucleotide-database {config[paths][chocophlan]} --protein-database {config[paths][uniref]} --threads 8
-        cp $geneFamilies $pathCoverage $pathAbundance {config[paths][output_humann2]}
+        humann2 --input $input --output $TMPDIR \
+	--metaphlan-options "-t rel_ab --index v20_m200 --bowtie2db /c3se/NOBACKUP/groups/c3-c3se605-19-3/Scripts/bash/.snakemake/conda/7eee2741/bin/metaphlan_databases/mpa_v20_m200" \
+	--nucleotide-database {config[paths][chocophlan]} \
+	--protein-database {config[paths][uniref]} \
+	--threads 8
+        rename '_cat_' '_' *.tsv
+        cp *.tsv {config[paths][output_humann2]}
         """
 
 rule final_output:
