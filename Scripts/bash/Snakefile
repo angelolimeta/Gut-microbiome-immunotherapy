@@ -55,6 +55,24 @@ rule fastp_filter:
         cp $outputR1 $outputR2 {config[paths][filtered_reads]}
         """
 
+rule fastp_filter_singleEnd:
+    input:
+        config["paths"]["raw_reads"] + "{sample}.fastq.gz"
+    output:
+        config["paths"]["filtered_reads"] + "{sample}_filtered.fastq.gz"
+    params:
+        logs_json = "temp.json",
+        logs_html = "temp.html"
+    shell:
+        """
+        cp {input} $TMPDIR
+        cd $TMPDIR
+        input=`basename {input}`
+        output=`basename {output}`
+        fastp --thread 8 --in1 $input --out1 $output -j {params.logs_json} -h {params.logs_html}
+        cp $output {config[paths][filtered_reads]}
+        """
+
 rule calculate_abundances:
     input:
         R1 = config["paths"]["filtered_reads"] + "{sample}_1_filtered.fastq.gz",
@@ -72,6 +90,21 @@ rule calculate_abundances:
         cp $output {config[paths][motusfiles]}
         """
 # Run motus merge -d $motus_directory on the produced files
+
+rule calculate_abundances_singleEnd:
+    input:
+        config["paths"]["filtered_reads"] + "{sample}_filtered.fastq.gz"
+    output:
+        config["paths"]["motusfiles"] + "{sample}.motus"
+    shell:
+        """
+        cp {input} $TMPDIR
+        cd $TMPDIR
+        input=`basename {input}`
+        output=`basename {output}`
+        motus profile -s $input -o $output -n {wildcards.sample} -t 8 -q -p -c
+        cp $output {config[paths][motusfiles]}
+        """
 
 rule concatenate_reads:
     input:
@@ -113,6 +146,31 @@ rule profileGenes:
 	--protein-database {config[paths][uniref]} \
 	--threads 8
         rename '_cat_' '_' *.tsv
+        cp *.tsv {config[paths][output_humann2]}
+        """
+
+rule profileGenes_singleEnd:
+    input:
+        config["paths"]["filtered_reads"] + "{sample}.fastq.gz"
+    output:
+        geneFamilies = config["paths"]["output_humann2"] + "{sample}_genefamilies.tsv",
+        pathCoverage = config["paths"]["output_humann2"] + "{sample}_pathcoverage.tsv",
+        pathAbundance = config["paths"]["output_humann2"] + "{sample}_pathabundance.tsv"
+    conda:
+        config["envs"]["humann2"]
+    shell:
+        """
+        cp {input} $TMPDIR
+        cd $TMPDIR
+        input=`basename {input}`
+        geneFamilies=`basename {output.geneFamilies}`
+        pathCoverage=`basename {output.pathCoverage}`
+        pathAbundance=`basename {output.pathAbundance}`
+        humann2 --input $input --output $TMPDIR \
+	--metaphlan-options "-t rel_ab --index v20_m200 --bowtie2db /c3se/NOBACKUP/groups/c3-c3se605-19-3/Scripts/bash/.snakemake/conda/7eee2741/bin/metaphlan_databases/mpa_v20_m200" \
+	--nucleotide-database {config[paths][chocophlan]} \
+	--protein-database {config[paths][uniref]} \
+	--threads 8
         cp *.tsv {config[paths][output_humann2]}
         """
 
