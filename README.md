@@ -28,4 +28,4 @@ Only WGS samples taken prior to immune checkpoint inhibition are used. For examp
 
 ### Response Criteria
 
-Treatment response is evaluated through the **Response Evaluation Criteria in Solid Tumors 1.1 (RECIST 1.1)**. Patients with **complete** or **partial** response, according to RECIST 1.1 criteria, are classified as responders; whereas patients with **stable** or **progressive** disease are classified as non-responders.
+Treatment response is evaluated through the Response Evaluation Criteria in Solid Tumors 1.1 (RECIST 1.1). Patients with **complete** or **partial** response, according to RECIST 1.1 criteria, are classified as responders; whereas patients with **stable** or **progressive** disease are classified as non-responders.
