@@ -24,6 +24,8 @@ All studies utilize metagenomic sequencing through either **Whole Genome Shotgun
 | Routy et al.          |          ? |              ? |   100 | Thermofisher Ion Proton | ENA      | PRJEB22863 |
 | Frankel et al.        |         24 |              9 |    33 |   Illumina HiSeq 2000   | SRA      |PRJNA397906 |
 
+Only WGS samples taken prior to immune checkpoint inhibition are used. For example, the Routy et al. data set included several WGS samples from the same patient at different timepoints during treatment (*T0*,*T1*,*T2*). However, only the *T0* samples are used.
+
 ### Response Criteria
 
 Treatment response is evaluated through the **Response Evaluation Criteria in Solid Tumors 1.1 (RECIST 1.1)**. Patients with **complete** or **partial** response, according to RECIST 1.1 criteria, are classified as responders; whereas patients with **stable** or **progressive** disease are classified as non-responders.
