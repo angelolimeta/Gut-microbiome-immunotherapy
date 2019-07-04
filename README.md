@@ -2,7 +2,7 @@
 
 This repository contains scripts for meta-analysis of four studies which observed that the gut microbiome composition plays a large role in predicting the treatment outcome of patients undergoing cancer immunotherapy.
 
-* Last update: 2019-02-26
+* Last update: 2019-07-04
 
 This repository is administered by Angelo Limeta ([@angelolimeta](https://github.com/angelolimeta)), Division of Systems and Synthetic Biology, Department of Biology and Biological Engineering, Chalmers University of Technology.
 
@@ -21,7 +21,7 @@ All studies utilize metagenomic sequencing through either **Whole Genome Shotgun
 |-----------------------|-----------:|---------------:|------:|:-----------------------:|----------|:----------:|
 | Gopalakrishnan et al. |         14 |             11 |    25 |   Illumina HiSeq 2000   | ENA      | PRJEB22893 |
 | Matson et al.         |         16 |             26 | 42(39)|  Illumina NextSeq 500   | SRA      |PRJNA399742 |
-| Routy et al.          |          ? |              ? |   100 | Thermofisher Ion Proton | ENA      | PRJEB22863 |
+| Routy et al.          |          ? |              ? |   127 | Thermofisher Ion Proton | ENA      | PRJEB22863 |
 | Frankel et al.        |         24 |              9 |    33 |   Illumina HiSeq 2000   | SRA      |PRJNA397906 |
 
 Only WGS samples taken prior to immune checkpoint inhibition are used. For example, the Routy et al. data set included several WGS samples from the same patient at different timepoints during treatment (*T0*,*T1*,*T2*). However, only the *T0* samples are used.
