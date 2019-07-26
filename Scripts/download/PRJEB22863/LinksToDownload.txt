@@ -1,4 +1,3 @@
-http://ftp.sra.ebi.ac.uk/vol1/fastq/ERR221/006/ERR2213696/ERR2213696.fastq.gz
 http://ftp.sra.ebi.ac.uk/vol1/fastq/ERR221/009/ERR2213699/ERR2213699.fastq.gz
 http://ftp.sra.ebi.ac.uk/vol1/fastq/ERR221/001/ERR2213701/ERR2213701.fastq.gz
 http://ftp.sra.ebi.ac.uk/vol1/fastq/ERR221/005/ERR2213705/ERR2213705.fastq.gz
