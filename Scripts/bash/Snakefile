@@ -19,7 +19,13 @@ PATH_fastq = "/c3se/NOBACKUP/groups/c3-c3se605-19-3/data/" + 'fastqfiles/*'
 SAMPLES = sorted([os.path.splitext(val)[0] for val in (glob.glob(PATH_fastq))]) #Remove .gz from filename path
 SAMPLES = [os.path.splitext(val)[0] for val in SAMPLES]
 SAMPLES = [os.path.basename(val) for val in SAMPLES]
-SAMPLES = [x[:-2] for x in SAMPLES]
+
+for i, s in enumerate(SAMPLES):
+    if SAMPLES[i][0] == 's':
+        SAMPLES[i] = SAMPLES[i][3:] # Remove se_ prefix for single-end reads
+    else:
+        SAMPLES[i] = SAMPLES[i][:-2] # Remove _1 or _2 suffix for paired-end reads
+
 SAMPLES = list(set(SAMPLES))
 
 rule all:
@@ -57,9 +63,9 @@ rule fastp_filter:
 
 rule fastp_filter_singleEnd:
     input:
-        config["paths"]["raw_reads"] + "{sample}.fastq.gz"
+        config["paths"]["raw_reads"] + "se_{sample}.fastq.gz"
     output:
-        config["paths"]["filtered_reads"] + "{sample}_filtered.fastq.gz"
+        config["paths"]["filtered_reads"] + "se_{sample}_filtered.fastq.gz"
     params:
         logs_json = "temp.json",
         logs_html = "temp.html"
@@ -93,7 +99,7 @@ rule calculate_abundances:
 
 rule calculate_abundances_singleEnd:
     input:
-        config["paths"]["filtered_reads"] + "{sample}_filtered.fastq.gz"
+        config["paths"]["filtered_reads"] + "se_{sample}_filtered.fastq.gz"
     output:
         config["paths"]["motusfiles"] + "{sample}.motus"
     shell:
@@ -151,7 +157,7 @@ rule profileGenes:
 
 rule profileGenes_singleEnd:
     input:
-        config["paths"]["filtered_reads"] + "{sample}.fastq.gz"
+        config["paths"]["filtered_reads"] + "se_{sample}_filtered.fastq.gz"
     output:
         geneFamilies = config["paths"]["output_humann2"] + "{sample}_genefamilies.tsv",
         pathCoverage = config["paths"]["output_humann2"] + "{sample}_pathcoverage.tsv",
@@ -177,11 +183,11 @@ rule profileGenes_singleEnd:
 rule final_output:
     input:
         expand(config["paths"]["motusfiles"] + "{sample}.motus", sample=SAMPLES),
-        expand(config["paths"]["output_humann2"] + "{sample}_genefamilies.tsv", sample=SAMPLES),
-        expand(config["paths"]["output_humann2"] + "{sample}_pathcoverage.tsv", sample=SAMPLES),
-        expand(config["paths"]["output_humann2"] + "{sample}_pathabundance.tsv", sample=SAMPLES)
+        #expand(config["paths"]["output_humann2"] + "{sample}_genefamilies.tsv", sample=SAMPLES),
+        #expand(config["paths"]["output_humann2"] + "{sample}_pathcoverage.tsv", sample=SAMPLES),
+        #expand(config["paths"]["output_humann2"] + "{sample}_pathabundance.tsv", sample=SAMPLES)
     output:
         report = "MOTUS2worked.txt",
-        concat = "humann2worked.txt"
+        #concat = "humann2worked.txt"
     shell:
-        "touch {output.report} {output.concat}"
+        "touch {output.report}" #"touch {output.report} {output.concat}"
