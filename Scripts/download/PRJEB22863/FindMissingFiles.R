@@ -31,7 +31,12 @@ LinksToDownload = paste("http://",LinksToDownload,sep = "")
 SamplesToRemove = intersect(data_t1t2$run_accession,filesInDir)
 length(SamplesToRemove)
 
+# All links
+AllLinks = data_t0$fastq_ftp
+AllLinks = paste("http://",AllLinks,sep = "")
+
 # Save data
 setwd("/Users/angelol/Documents/PhD/Gut-microbiome-immunotherapy/Scripts/download/PRJEB22863")
 write.table(SamplesToRemove, file = "SamplesToRemove.txt", sep = " ", row.names = FALSE, col.names = FALSE, quote = FALSE)
 write.table(LinksToDownload, file = "LinksToDownload.txt", sep = " ", row.names = FALSE, col.names = FALSE, quote = FALSE)
+write.table(AllLinks, file = "AllLinks.txt", sep = " ", row.names = FALSE, col.names = FALSE, quote = FALSE)
