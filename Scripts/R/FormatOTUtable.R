@@ -2,7 +2,7 @@
 
 # Remember to manually remove the "#" character in the heading of the .motus file
 # This has already been done for the files that are imported below
-OTU <- read.delim("~/Documents/PhD/Gut-microbiome-immunotherapy/data/motus_files_merged_raw/GopMatFra.motus", header=TRUE, stringsAsFactors=FALSE)
+OTU <- read.delim("~/Documents/PhD/Gut-microbiome-immunotherapy/data/motus_files_merged_raw/all.motus", header=TRUE, stringsAsFactors=FALSE)
 
 clin = readRDS(file = "/Users/angelol/Documents/PhD/Gut-microbiome-immunotherapy/Metadata/Processed_metadata/clin.rds")
 
