@@ -2,6 +2,7 @@ library("pheatmap")
 library("RColorBrewer")
 library("ggplot2")
 library("Rtsne")
+library("dplyr")
 ## if not installed, quickly add it as follows:
 #source("http://bioconductor.org/biocLite.R")
 #biocLite(c("RColorBrewer", "pheatmap", "ggplot2", "Rtsne"))
@@ -16,6 +17,12 @@ clin = readRDS("/Users/angelol/Documents/PhD/Gut-microbiome-immunotherapy/Metada
 phylo_meta = readRDS("/Users/angelol/Documents/PhD/Gut-microbiome-immunotherapy/Metadata/Processed_metadata/phylo_meta.rds")
 
 # ==== DATA PRE-PROCESSING ====
+# Remove Routy et al samples
+clin = clin %>% filter(Study != "Routy_et_al")
+OTU = OTU[,colnames(OTU) %in% clin$Patient_id]
+
+# Convert to relative abundance
+OTU = apply(OTU, 2, function(x){x/sum(x)})
 
 # Filter out microbes that are not identified across at least 5 samples
 OTU_filtered = OTU[apply(OTU, 1, function(x) sum(x > 0)) > 5,]
