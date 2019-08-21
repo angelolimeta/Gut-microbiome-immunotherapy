@@ -117,5 +117,19 @@ saveRDS(geneAbundance_filtered, file = "/Users/angelol/Documents/PhD/Gut-microbi
 saveRDS(pathAbundance_filtered, file = "/Users/angelol/Documents/PhD/Gut-microbiome-immunotherapy/data/humann2/pathAbundance_filtered.rds")
 saveRDS(pathCoverage_filtered, file = "/Users/angelol/Documents/PhD/Gut-microbiome-immunotherapy/data/humann2/pathCoverage_filtered.rds")
 
+# ==== PROCESS MERGED TABLES ====
+
+###################
+## geneAbundance ##
+###################
+
+
+
+# Convert our gene matrix into long format.
+geneAbundance %>% gather(key = "sample", value = "abundance", -`# Gene Family`) -> geneAbundance_long
+# Remove # character from column name
+geneAbundance_long %>% rename(gene_family = `# Gene Family`) -> geneAbundance_long
+# Convert into CoPM
+geneAbundance_long %>% group_by(sample) %>% mutate(CoPM = abundance/sum(abundance, na.rm = T)*1e6) -> geneAbundance_long
 
 
