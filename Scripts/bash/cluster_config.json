@@ -13,4 +13,4 @@
         "error"     : "error.txt",
 },
 }
-#nohup snakemake --use-conda -j 500 --rerun-incomplete --cluster-config cluster_config.json -c "sbatch -A {cluster.account} -t {cluster.time} -n {cluster.n} --ntasks {cluster.tasks} --cpus-per-task {cluster.cpusPerTask} --output {cluster.output} --error {cluster.error}" &
+#nohup snakemake -s Snakefile_UniRef50 --use-conda -j 500 --rerun-incomplete --cluster-config cluster_config.json -c "sbatch -A {cluster.account} -t {cluster.time} -n {cluster.n} --ntasks {cluster.tasks} --cpus-per-task {cluster.cpusPerTask} --output {cluster.output} --error {cluster.error}" &
