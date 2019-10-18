@@ -17,6 +17,10 @@ library(pROC)
 library(xml2)
 library(bio3d)
 library(RCurl)
+library(gridExtra)
+library(grid)
+library(ggpubr)
+library(lemon)
 ```
 
 ## Load data
@@ -185,11 +189,188 @@ p_pathCov_pca = ggplot(data = as.data.frame(plotData), aes(x = PC1, y = PC2)) +
   theme(axis.text.x=element_blank(),
         axis.text.y=element_blank()) +
   theme(aspect.ratio=1) +
-  scale_color_manual(values=c("violetred", "turquoise3"))
+  scale_color_manual(values=c("violetred", "darkturquoise"))
 
 p_pathCov_pca
 
+# Save plots
+ggsave(filename = "~/Documents/PhD/Gut-microbiome-immunotherapy/Figures/GenePath/GenePCA.svg",plot = p_gene_pca, width = 6, height = 5)
+ggsave(filename = "~/Documents/PhD/Gut-microbiome-immunotherapy/Figures/GenePath/PathPCA.svg",plot = p_path_pca, width = 6, height = 5)
+ggsave(filename = "~/Documents/PhD/Gut-microbiome-immunotherapy/Figures/GenePath/PathCovPCA.svg",plot = p_pathCov_pca, width = 6, height = 5)
 ```
+
+Seems like study to study variance is still high, lets repeat the analysis for each study separately
+
+```{r}
+studies = c("Gopalakrishnan","Matson","Frankel","Routy")
+
+# Gene abundance PCA
+
+# Initialize empty plot list
+p_list = list()
+for (i in 1:length(studies)) {
+  local({ #Sets local enviroment in order to not overwrite plot data
+    
+    # Extract three letter study ID
+    study_id = substr(studies[i], start = 1, stop = 3)
+    # Subset matrix
+    geneAbundance_study = geneAbundance[,grepl(study_id,colnames(geneAbundance))]
+    # Run PCA for the gene abundance data
+    pca.gene = prcomp(t(geneAbundance_study), scale = FALSE, center = TRUE)
+    # Format output for ggplot
+    plotData = pca.gene$x[,c(1,2)]
+    plotData = data.frame(PC1 = as.numeric(plotData[,1]),
+                          PC2 = as.numeric(plotData[,2]),
+                          Response = gsub(".*_R","R",gsub(".*_NR","NR",rownames(plotData))),
+                          Study = substr(rownames(plotData),6,8))
+    rownames(plotData) = NULL
+    # Call ggplot
+    p_gene_pca = ggplot(data = as.data.frame(plotData), aes(x = PC1, y = PC2)) +
+      labs(title = paste0(studies[i]," et al.")) +
+      geom_point(size = 2,aes(color = Response)) +
+      stat_ellipse(aes(color = Response, group = Response),size = 1, linetype = 1) +
+      xlab(paste("PC1: ", round(((pca.gene$sdev[1])^2)/sum((pca.gene$sdev)^2)*100,1),"% variance",sep = "")) +
+      ylab(paste("PC2: ", round(((pca.gene$sdev[2])^2)/sum((pca.gene$sdev)^2)*100,1),"% variance",sep = "")) +
+      theme_classic() +
+      theme(plot.title = element_text(face="bold")) +
+      theme(text = element_text(family = "Helvetica")) +
+      theme(axis.text.x=element_blank(),
+            axis.text.y=element_blank()) +
+      theme(aspect.ratio=1) +
+      scale_color_manual(values=c("violetred", "turquoise3"))
+    
+    # Save plot to plot list and extract legend from last plot
+    if(i != length(studies)){
+      p_gene_pca = p_gene_pca + theme(legend.position = "none")
+      p_list[[i]] <<- p_gene_pca
+    } else{
+      legend = g_legend(p_gene_pca)
+      p_gene_pca = p_gene_pca + theme(legend.position = "none")
+      p_list[[i]] <<- p_gene_pca
+      p_list[[i+1]] <<- legend
+    }
+
+  })
+}
+
+p_gene_pca_study = grid.arrange(grobs = p_list,
+                                layout_matrix = rbind(c(1, 2, 5),
+                                                      c(3, 4, 5)),
+                                top = textGrob("PCA of gene abundances", gp = gpar(fontsize = 20, font = 1)))
+
+# Pathway abundance PCA
+
+# Initialize empty plot list
+p_list = list()
+for (i in 1:length(studies)) {
+  local({ #Sets local enviroment in order to not overwrite plot data
+    
+    # Extract three letter study ID
+    study_id = substr(studies[i], start = 1, stop = 3)
+    # Subset matrix
+    pathAbundance_study = pathAbundance[,grepl(study_id,colnames(pathAbundance))]
+    # Run PCA for the pathway abundance data
+    pca.path = prcomp(t(pathAbundance_study), scale = FALSE, center = TRUE)
+    # Format output for ggplot
+    plotData = pca.path$x[,c(1,2)]
+    plotData = data.frame(PC1 = as.numeric(plotData[,1]),
+                          PC2 = as.numeric(plotData[,2]),
+                          Response = gsub(".*_R","R",gsub(".*_NR","NR",rownames(plotData))),
+                          Study = substr(rownames(plotData),6,8))
+    rownames(plotData) = NULL
+    # Call ggplot
+    p_path_pca = ggplot(data = as.data.frame(plotData), aes(x = PC1, y = PC2)) +
+      labs(title = paste0(studies[i]," et al.")) +
+      geom_point(size = 2,aes(color = Response)) +
+      stat_ellipse(aes(color = Response, group = Response),size = 1, linetype = 1) +
+      xlab(paste("PC1: ", round(((pca.path$sdev[1])^2)/sum((pca.path$sdev)^2)*100,1),"% variance",sep = "")) +
+      ylab(paste("PC2: ", round(((pca.path$sdev[2])^2)/sum((pca.path$sdev)^2)*100,1),"% variance",sep = "")) +
+      theme_classic() +
+      theme(plot.title = element_text(face="bold")) +
+      theme(text = element_text(family = "Helvetica")) +
+      theme(axis.text.x=element_blank(),
+            axis.text.y=element_blank()) +
+      theme(aspect.ratio=1) +
+      scale_color_manual(values=c("violetred", "turquoise3"))
+    
+    # Save plot to plot list and extract legend from last plot
+    if(i != length(studies)){
+      p_path_pca = p_path_pca + theme(legend.position = "none")
+      p_list[[i]] <<- p_path_pca
+    } else{
+      legend = g_legend(p_path_pca)
+      p_path_pca = p_path_pca + theme(legend.position = "none")
+      p_list[[i]] <<- p_path_pca
+      p_list[[i+1]] <<- legend
+    }
+
+  })
+}
+
+p_path_pca_study = grid.arrange(grobs = p_list,
+                                layout_matrix = rbind(c(1, 2, 5),
+                                                      c(3, 4, 5)),
+                                top = textGrob("PCA of pathway abundances", gp = gpar(fontsize = 20, font = 1)))
+
+# Pathway coverage PCA
+
+# Initialize empty plot list
+p_list = list()
+for (i in 1:length(studies)) {
+  local({ #Sets local enviroment in order to not overwrite plot data
+    
+    # Extract three letter study ID
+    study_id = substr(studies[i], start = 1, stop = 3)
+    # Subset matrix
+    pathCoverage_study = pathCoverage[,grepl(study_id,colnames(pathCoverage))]
+    # Run PCA for the pathway coverage data
+    pca.pathCov = prcomp(t(pathCoverage_study), scale = FALSE, center = TRUE)
+    # Format output for ggplot
+    plotData = pca.pathCov$x[,c(1,2)]
+    plotData = data.frame(PC1 = as.numeric(plotData[,1]),
+                          PC2 = as.numeric(plotData[,2]),
+                          Response = gsub(".*_R","R",gsub(".*_NR","NR",rownames(plotData))),
+                          Study = substr(rownames(plotData),6,8))
+    rownames(plotData) = NULL
+    # Call ggplot
+    p_pathCov_pca = ggplot(data = as.data.frame(plotData), aes(x = PC1, y = PC2)) +
+      labs(title = paste0(studies[i]," et al.")) +
+      geom_point(size = 2,aes(color = Response)) +
+      stat_ellipse(aes(color = Response, group = Response),size = 1, linetype = 1) +
+      xlab(paste("PC1: ", round(((pca.pathCov$sdev[1])^2)/sum((pca.pathCov$sdev)^2)*100,1),"% variance",sep = "")) +
+      ylab(paste("PC2: ", round(((pca.pathCov$sdev[2])^2)/sum((pca.pathCov$sdev)^2)*100,1),"% variance",sep = "")) +
+      theme_classic() +
+      theme(plot.title = element_text(face="bold")) +
+      theme(text = element_text(family = "Helvetica")) +
+      theme(axis.text.x=element_blank(),
+            axis.text.y=element_blank()) +
+      theme(aspect.ratio=1) +
+      scale_color_manual(values=c("violetred", "turquoise3"))
+    
+    # Save plot to plot list and extract legend from last plot
+    if(i != length(studies)){
+      p_pathCov_pca = p_pathCov_pca + theme(legend.position = "none")
+      p_list[[i]] <<- p_pathCov_pca
+    } else{
+      legend = g_legend(p_pathCov_pca)
+      p_pathCov_pca = p_pathCov_pca + theme(legend.position = "none")
+      p_list[[i]] <<- p_pathCov_pca
+      p_list[[i+1]] <<- legend
+    }
+
+  })
+}
+
+p_pathCov_pca_study = grid.arrange(grobs = p_list,
+                                layout_matrix = rbind(c(1, 2, 5),
+                                                      c(3, 4, 5)),
+                                top = textGrob("PCA of pathway coverages", gp = gpar(fontsize = 20, font = 1)))
+# Save plots
+ggsave(filename = "~/Documents/PhD/Gut-microbiome-immunotherapy/Figures/GenePath/GenePCA_study.svg",plot = p_gene_pca_study, width = 6, height = 5)
+ggsave(filename = "~/Documents/PhD/Gut-microbiome-immunotherapy/Figures/GenePath/PathPCA_study.svg",plot = p_path_pca_study, width = 6, height = 5)
+ggsave(filename = "~/Documents/PhD/Gut-microbiome-immunotherapy/Figures/GenePath/PathCovPCA_study.svg",plot = p_pathCov_pca_study, width = 6, height = 5)
+```
+
 
 ### UMAP
 
@@ -208,14 +389,14 @@ rownames(plotData) = NULL
 # Call ggplot
 p_gene_UMAP = ggplot(data = as.data.frame(plotData), aes(x = UMAP1, y = UMAP2)) +
   labs(title = "UMAP of all samples based on gene abundance", subtitle = "log2 (CoPM + 1)") +
-  geom_point(size = 1,aes(color = Response, shape = Study)) +
-  stat_ellipse(aes(color = Response, group = Response), linetype = 1) +
+  geom_point(size = 2,aes(color = Response, shape = Study)) +
+  stat_ellipse(aes(color = Response, group = Response), size = 1, linetype = 1) +
   stat_ellipse(aes(group = Study), linetype = 3, color = "grey70") +
-  xlab("UMAP1") +
-  ylab("UMAP2") +
+  theme_void() +
   theme(plot.title = element_text(face="bold")) +
   theme(text = element_text(family = "Helvetica")) +
-  theme(aspect.ratio=1)
+  theme(aspect.ratio=1) +
+  scale_color_manual(values=c("violetred", "turquoise3"))
 p_gene_UMAP
 
 # Set seed for reproducibility
@@ -231,14 +412,14 @@ rownames(plotData) = NULL
 # Call ggplot
 p_path_UMAP = ggplot(data = as.data.frame(plotData), aes(x = UMAP1, y = UMAP2)) +
   labs(title = "UMAP of all samples based on pathway abundance", subtitle = "log2 (CoPM + 1)") +
-  geom_point(size = 1,aes(color = Response, shape = Study)) +
-  stat_ellipse(aes(color = Response, group = Response), linetype = 1) +
+  geom_point(size = 2,aes(color = Response, shape = Study)) +
+  stat_ellipse(aes(color = Response, group = Response), size = 1, linetype = 1) +
   stat_ellipse(aes(group = Study), linetype = 3, color = "grey70") +
-  xlab("UMAP1") +
-  ylab("UMAP2") +
+  theme_void() +
   theme(plot.title = element_text(face="bold")) +
   theme(text = element_text(family = "Helvetica")) +
-  theme(aspect.ratio=1)
+  theme(aspect.ratio=1) +
+  scale_color_manual(values=c("violetred", "turquoise3"))
 p_path_UMAP
 
 # Set seed for reproducibility
@@ -254,33 +435,179 @@ rownames(plotData) = NULL
 # Call ggplot
 p_pathCov_UMAP = ggplot(data = as.data.frame(plotData), aes(x = UMAP1, y = UMAP2)) +
   labs(title = "UMAP of all samples based on pathway Coverage", subtitle = "HUMANn2 confidence score") +
-  geom_point(size = 1,aes(color = Response, shape = Study)) +
-  stat_ellipse(aes(color = Response, group = Response), linetype = 1) +
+  geom_point(size = 2,aes(color = Response, shape = Study)) +
+  stat_ellipse(aes(color = Response, group = Response), size = 1, linetype = 1) +
   stat_ellipse(aes(group = Study), linetype = 3, color = "grey70") +
-  xlab("UMAP1") +
-  ylab("UMAP2") +
+  theme_void() +
   theme(plot.title = element_text(face="bold")) +
   theme(text = element_text(family = "Helvetica")) +
-  theme(aspect.ratio=1)
+  theme(aspect.ratio=1) +
+  scale_color_manual(values=c("violetred", "turquoise3"))
 p_pathCov_UMAP
 
+# Save plots
+ggsave(filename = "~/Documents/PhD/Gut-microbiome-immunotherapy/Figures/GenePath/GenePCA_study.svg",plot = p_gene_UMAP, width = 6, height = 5)
+ggsave(filename = "~/Documents/PhD/Gut-microbiome-immunotherapy/Figures/GenePath/PathPCA_study.svg",plot = p_path_UMAP, width = 6, height = 5)
+ggsave(filename = "~/Documents/PhD/Gut-microbiome-immunotherapy/Figures/GenePath/PathCovPCA_study.svg",plot = p_pathCov_UMAP, width = 6, height = 5)
 
 ```
 
-Pathway coverage seems to split nicely. Let's run k-means clustering and identify the samples.
+Let's again repeat the UMAP analysis for each study separately.
 
 ```{r}
-set.seed(9)
+studies = c("Gopalakrishnan","Matson","Frankel","Routy")
 
-cluster_pathCov = kmeans(umap_pathCov$layout, 2,nstart = 20)
-cluster_pathCov
+# Gene abundance UMAP
 
-cluster_pathCov$cluster==1
+# Initialize empty plot list
+p_list = list()
+for (i in 1:length(studies)) {
+  local({ #Sets local enviroment in order to not overwrite plot data
+    
+    # Extract three letter study ID
+    study_id = substr(studies[i], start = 1, stop = 3)
+    # Subset matrix
+    geneAbundance_study = geneAbundance[,grepl(study_id,colnames(geneAbundance))]
+    # Set seed for reproducibility
+    set.seed(9)
+    # Run UMAP for the gene abundance data
+    umap_gene = umap(t(geneAbundance_study), config = umap.defaults, method = "naive")
+    # Format output for ggplot
+    plotData = umap_gene$layout[,c(1,2)]
+    plotData = data.frame(UMAP1 = as.numeric(plotData[,1]),
+                          UMAP2 = as.numeric(plotData[,2]),
+                          Response = gsub(".*_R","R",gsub(".*_NR","NR",rownames(plotData))),
+                          Study = substr(rownames(plotData),6,8))
+    rownames(plotData) = NULL
+    # Call ggplot
+    p_gene_UMAP = ggplot(data = as.data.frame(plotData), aes(x = UMAP1, y = UMAP2)) +
+      labs(title = paste0(studies[i]," et al.")) +
+      geom_point(size = 2,aes(color = Response)) +
+      stat_ellipse(aes(color = Response, group = Response), linetype = 1) +
+      theme_void() +
+      theme(plot.title = element_text(face="bold")) +
+      theme(text = element_text(family = "Helvetica")) +
+      theme(aspect.ratio=1) +
+      scale_color_manual(values=c("violetred", "turquoise3"))
 
-# Attach to clin data
-clin = cbind(clin, pathCov_cluster = cluster_pathCov$cluster)
+    # Save plot to plot list and extract legend from last plot
+    if(i != length(studies)){
+      p_gene_UMAP = p_gene_UMAP + theme(legend.position = "none")
+      p_list[[i]] <<- p_gene_UMAP
+    } else{
+      legend = g_legend(p_gene_UMAP)
+      p_gene_UMAP = p_gene_UMAP + theme(legend.position = "none")
+      p_list[[i]] <<- p_gene_UMAP
+      p_list[[i+1]] <<- legend
+    }
+
+  })
+}
+p_gene_UMAP_study = grid.arrange(grobs = p_list,
+                                layout_matrix = rbind(c(1, 2, 5),
+                                                      c(3, 4, 5)),
+                                top = textGrob("UMAP of gene abundances", gp = gpar(fontsize = 20, font = 2)))
+
+# Pathway abundance UMAP
+
+# Initialize empty plot list
+p_list = list()
+for (i in 1:length(studies)) {
+  local({ #Sets local enviroment in order to not overwrite plot data
+    
+    # Extract three letter study ID
+    study_id = substr(studies[i], start = 1, stop = 3)
+    # Subset matrix
+    pathAbundance_study = pathAbundance[,grepl(study_id,colnames(pathAbundance))]
+    # Set seed for reproducibility
+    set.seed(9)
+    # Run UMAP for the pathway abundance data
+    umap_path = umap(t(pathAbundance_study), config = umap.defaults, method = "naive")
+    # Format output for ggplot
+    plotData = umap_path$layout[,c(1,2)]
+    plotData = data.frame(UMAP1 = as.numeric(plotData[,1]),
+                          UMAP2 = as.numeric(plotData[,2]),
+                          Response = gsub(".*_R","R",gsub(".*_NR","NR",rownames(plotData))),
+                          Study = substr(rownames(plotData),6,8))
+    rownames(plotData) = NULL
+    # Call ggplot
+    p_path_UMAP = ggplot(data = as.data.frame(plotData), aes(x = UMAP1, y = UMAP2)) +
+      labs(title = paste0(studies[i]," et al.")) +
+      geom_point(size = 2,aes(color = Response)) +
+      stat_ellipse(aes(color = Response, group = Response), linetype = 1) +
+      theme_void() +
+      theme(plot.title = element_text(face="bold")) +
+      theme(text = element_text(family = "Helvetica")) +
+      theme(aspect.ratio=1) +
+      scale_color_manual(values=c("violetred", "turquoise3"))
+
+    # Save plot to plot list and extract legend from last plot
+    if(i != length(studies)){
+      p_path_UMAP = p_path_UMAP + theme(legend.position = "none")
+      p_list[[i]] <<- p_path_UMAP
+    } else{
+      legend = g_legend(p_path_UMAP)
+      p_path_UMAP = p_path_UMAP + theme(legend.position = "none")
+      p_list[[i]] <<- p_path_UMAP
+      p_list[[i+1]] <<- legend
+    }
+
+  })
+}
+p_path_UMAP_study = grid.arrange(grobs = p_list,
+                                layout_matrix = rbind(c(1, 2, 5),
+                                                      c(3, 4, 5)),
+                                top = textGrob("UMAP of pathway abundances", gp = gpar(fontsize = 20, font = 2)))
+
+# Initialize empty plot list
+p_list = list()
+for (i in 1:length(studies)) {
+  local({ #Sets local enviroment in order to not overwrite plot data
+    
+    # Extract three letter study ID
+    study_id = substr(studies[i], start = 1, stop = 3)
+    # Subset matrix
+    pathCoverage_study = pathCoverage[,grepl(study_id,colnames(pathCoverage))]
+    # Set seed for reproducibility
+    set.seed(9)
+    # Run UMAP for the pathCov abundance data
+    umap_pathCov = umap(t(pathCoverage_study), config = umap.defaults, method = "naive")
+    # Format output for ggplot
+    plotData = umap_pathCov$layout[,c(1,2)]
+    plotData = data.frame(UMAP1 = as.numeric(plotData[,1]),
+                          UMAP2 = as.numeric(plotData[,2]),
+                          Response = gsub(".*_R","R",gsub(".*_NR","NR",rownames(plotData))),
+                          Study = substr(rownames(plotData),6,8))
+    rownames(plotData) = NULL
+    # Call ggplot
+    p_pathCov_UMAP = ggplot(data = as.data.frame(plotData), aes(x = UMAP1, y = UMAP2)) +
+      labs(title = paste0(studies[i]," et al.")) +
+      geom_point(size = 2,aes(color = Response)) +
+      stat_ellipse(aes(color = Response, group = Response), linetype = 1) +
+      theme_void() +
+      theme(plot.title = element_text(face="bold")) +
+      theme(text = element_text(family = "Helvetica")) +
+      theme(aspect.ratio=1) +
+      scale_color_manual(values=c("violetred", "turquoise3"))
+
+    # Save plot to plot list and extract legend from last plot
+    if(i != length(studies)){
+      p_pathCov_UMAP = p_pathCov_UMAP + theme(legend.position = "none")
+      p_list[[i]] <<- p_pathCov_UMAP
+    } else{
+      legend = g_legend(p_pathCov_UMAP)
+      p_pathCov_UMAP = p_pathCov_UMAP + theme(legend.position = "none")
+      p_list[[i]] <<- p_pathCov_UMAP
+      p_list[[i+1]] <<- legend
+    }
+
+  })
+}
+p_pathCov_UMAP_study = grid.arrange(grobs = p_list,
+                                layout_matrix = rbind(c(1, 2, 5),
+                                                      c(3, 4, 5)),
+                                top = textGrob("UMAP of pathway coverages", gp = gpar(fontsize = 20, font = 2)))
 ```
-
 
 ### Query UniRef
 
@@ -339,7 +666,7 @@ for (i in 1:nrow(geneAbundance)) {
   NR_abundance = as.numeric(geneAbundance[i,grepl("_NR",colnames(geneAbundance))])
   
   DEgenes$pvalue[i] = wilcox.test(R_abundance,NR_abundance, alternative = "two.sided")$p.value
-  DEgenes$fold_change[i] = log2((median(R_abundance) + 1)/(median(NR_abundance) + 1))
+  DEgenes$fold_change[i] = median(R_abundance) - median(NR_abundance)
 }
 
 ## Adjust for multiple testing
@@ -349,7 +676,7 @@ DEgenes = DEgenes[order(DEgenes$pvalue),]
 # Keep only significant genes (P < 0.05)
 DEgenes = DEgenes[DEgenes$pvalue < 0.05,]
 
-print(DEgenes)
+print(cbind(DEgenes[1:80,]))
 
 # Initialise empty data frame for storing differentially abundant genes
 DEpaths = data.frame(pvalue = 1:nrow(pathAbundance), fold_change = 1:nrow(pathAbundance))
@@ -362,7 +689,7 @@ for (i in 1:nrow(pathAbundance)) {
   NR_abundance = as.numeric(pathAbundance[i,grepl("_NR",colnames(pathAbundance))])
   
   DEpaths$pvalue[i] = wilcox.test(R_abundance,NR_abundance, alternative = "two.sided")$p.value
-  DEpaths$fold_change[i] = log2((median(R_abundance) + 1)/(median(NR_abundance) + 1))
+  DEpaths$fold_change[i] = median(R_abundance) - median(NR_abundance)
 }
 
 ## Adjust for multiple testing
@@ -375,20 +702,52 @@ DEpaths = DEpaths[DEpaths$pvalue < 0.05,]
 print(DEpaths)
 ```
 
-In order to better visualise the difference, lets plot a heatmap of the differentially abundant genes/pathways.
+In order to better visualise the difference, lets plot a heatmap of the top 50 differentially abundant genes.
 
-```{r, fig.width=30, fig.height=10}
+```{r, fig.width=30, fig.height=30}
 # Define metrics for clustering
 drows1 <- "euclidean"
 dcols1 <- "euclidean"
+# Select data
+hm.data = geneAbundance[rownames(DEgenes),]
 # Create annotations for gene heatmap
 hm.cols = data.frame(Response = gsub(".*_R","R",gsub(".*_NR","NR",colnames(geneAbundance))))
 hm.cols$Response = factor(hm.cols$Response,levels(hm.cols$Response)[c(2,1)])
 rownames(hm.cols) = colnames(geneAbundance)
+hm.rows = data.frame(queryUniRef(rownames(hm.data)))
+rownames(hm.rows) = rownames(hm.data)
+hm.rows = hm.rows[,-2, drop =F]
+
 # Create heatmap
 # type "?pheatmap()" for more help
 # CairoWin()
-pheatmap(geneAbundance[rownames(DEgenes),],
+pheatmap(hm.data,
+         kmeans_k = NA,
+         show_rownames = TRUE, show_colnames = TRUE,
+         main = "Differentially abundant genes, log-normalised CoPM",
+         clustering_method = "average",
+         cluster_rows = TRUE, cluster_cols = TRUE,
+         clustering_distance_rows = drows1, 
+         clustering_distance_cols = dcols1,
+         annotation_col = hm.cols,
+         #labels_row = hm.rows$Name,
+         fontsize_row = 10,
+         cellwidth = 8,
+         cellheight = 18,
+         legend = F,
+         annotation_legend = F
+)
+```
+
+```{r, fig.width=30, fig.height=10}
+# Create annotations for pathway heatmap
+hm.cols = data.frame(Response = gsub(".*_R","R",gsub(".*_NR","NR",colnames(pathAbundance))))
+hm.cols$Response = factor(hm.cols$Response,levels(hm.cols$Response)[c(2,1)])
+rownames(hm.cols) = colnames(pathAbundance)
+# Create heatmap
+# type "?pheatmap()" for more help
+# CairoWin()
+pheatmap(pathAbundance[rownames(DEpaths),],
          kmeans_k = NA,
          show_rownames = TRUE, show_colnames = TRUE,
          main = "Differentially abundant genes, log-normalised CoPM",
@@ -444,16 +803,32 @@ path_train = cbind(t(pathAbundance),
                    Treatment = clin$Treatment,
                    Study = clin$Study,
                    Cancer_type = clin$Cancer_type)
+pathCov_train = cbind(t(pathCoverage),
+                   Treatment = clin$Treatment,
+                   Study = clin$Study,
+                   Cancer_type = clin$Cancer_type)
 ```
 
-Data is now ready for random forest classification. Let's check the top predictors
+Data is now ready for random forest classification. 
 ```{r}
+# Genes
+# Set number of trees in RF
+n_tree = 1000
 # Set seed for reproducibility
 set.seed(9)
+rf.gene <- randomForest(x=gene_train,y=clin$Response, ntree = n_tree ,importance = TRUE)
+
+# Pathways
 # Set number of trees in RF
 n_tree = 10000
-# Construct random forest model for genes
-rf.gene <- randomForest(x=gene_train,y=clin$Response, ntree = n_tree ,importance = TRUE)
+# Set seed for reproducibility
+set.seed(9)
+rf.path <- randomForest(x=path_train,y=clin$Response, ntree = n_tree ,importance = TRUE)
+``` 
+
+Let's check the top predictors
+```{r}
+# Genes
 # View confusion matrix
 print(rf.gene$confusion)
 # View the most important (Mean decrease of GINI impurity) features for prediction
@@ -464,6 +839,16 @@ rf.gene.importance = rf.gene.importance[1:100,]
 # Add info for each UniRef ID
 rf.gene.importance = cbind(rf.gene.importance, queryUniRef(rf.gene.importance$Gene))
 print(rf.gene.importance)
+
+# Pathways
+# View confusion matrix
+print(rf.path$confusion)
+# View the most important (Mean decrease of GINI impurity) features for prediction
+rf.path.importance <- data.frame(importance(rf.path, type = 2)) %>%
+  rownames_to_column('Pathway') %>%
+  arrange(desc(MeanDecreaseGini))
+rf.path.importance = rf.path.importance[1:100,]
+print(rf.path.importance)
 ```
 
 We can evaluate the model with a ROC-curve.
@@ -472,6 +857,10 @@ We can evaluate the model with a ROC-curve.
 rf.gene.roc = roc(as.factor(clin$Response),rf.gene$votes[,2])
 plot(rf.gene.roc)
 auc(rf.gene.roc)
+
+rf.path.roc = roc(as.factor(clin$Response),rf.path$votes[,2])
+plot(rf.path.roc)
+auc(rf.path.roc)
 
 ```
 
@@ -512,6 +901,150 @@ __Function of most important UniRef90 sequences enriched in R__
 * K1U071
   + 3-oxoacyl-(acyl-carrier-protein) reductase
   + Fatty acid biosynthesis and polyunsaturated fatty acid biosynthesis
+  
+  
+These are promising probiotic candidates, especially Cobalamin.
+
+### Lasso regression
+
+Let's try Lasso regression as well, which performs both variable selection and model fitting.
+```{r}
+
+```
+
+
+
+Let's also produce models for each separate study
+```{r}
+studies = c("Gopalakrishnan","Matson","Frankel","Routy")
+
+# Add clinical data as feature in model
+gene_train = cbind(t(geneAbundance),
+                   Treatment = clin$Treatment,
+                   Cancer_type = clin$Cancer_type)
+
+# Initialize empty list for storing model information
+rf_list = list()
+
+for (i in 1:length(studies)) {
+  # Extract three letter study ID
+  study_id = substr(studies[i], start = 1, stop = 3)
+  # Subset matrix
+  geneAbundance_study = geneAbundance[,grepl(study_id,colnames(geneAbundance))]
+  # Set seed for reproducibility
+  set.seed(9)
+  # Set number of trees in RF
+  n_tree = 1000
+  # Construct random forest model
+  rf_list$gene$model = randomForest(x=gene_train,y=clin$Response, ntree = n_tree ,importance = TRUE)
+  
+  # Save confusion matrix
+  rf_list$gene$confusion = rf_list$gene$model$confusion
+  # View the most important (Mean decrease of GINI impurity) features for prediction
+  rf_list$gene$topPredictors <- data.frame(importance(rf_list$gene$model, type = 2)) %>%
+  rownames_to_column('Gene') %>%
+  arrange(desc(MeanDecreaseGini))
+  rf_list$gene$topPredictors = rf_list$gene$topPredictors[1:100,]
+  # Add info for each UniRef ID
+  rf_list$gene$topPredictors = cbind(rf_list$gene$topPredictors, queryUniRef(rf_list$gene$topPredictors$Gene))
+}
+
+# Add clinical data as feature in model
+path_train = cbind(t(pathAbundance),
+                   Treatment = clin$Treatment,
+                   Cancer_type = clin$Cancer_type)
+
+# Initialize empty list for storing each model
+rf_list_path = list()
+for (i in 1:length(studies)) {
+  # Extract three letter study ID
+  study_id = substr(studies[i], start = 1, stop = 3)
+  # Subset matrix
+  pathAbundance_study = pathAbundance[,grepl(study_id,colnames(pathAbundance))]
+  # Set seed for reproducibility
+  set.seed(9)
+  # Set number of trees in RF
+  n_tree = 1000
+  # Construct random forest model
+  rf_list$path$model = randomForest(x=path_train,y=clin$Response, ntree = n_tree ,importance = TRUE)
+  
+  # Save confusion matrix
+  rf_list$path$confusion = rf_list$path$model$confusion
+  # View the most important (Mean decrease of GINI impurity) features for prediction
+  rf_list$path$topPredictors <- data.frame(importance(rf_list$path$model, type = 2)) %>%
+  rownames_to_column('Pathway') %>%
+  arrange(desc(MeanDecreaseGini))
+  rf_list$path$topPredictors = rf_list$path$topPredictors[1:100,]
+}
+
+# Add clinical data as feature in model
+pathCov_train = cbind(t(pathCoverage),
+                   Treatment = clin$Treatment,
+                   Cancer_type = clin$Cancer_type)
+
+# Initialize empty list for storing each model
+rf_list_pathCov = list()
+for (i in 1:length(studies)) {
+  # Extract three letter study ID
+  study_id = substr(studies[i], start = 1, stop = 3)
+  # Subset matrix
+  pathCoverage_study = pathCoverage[,grepl(study_id,colnames(pathCoverage))]
+  # Set seed for reproducibility
+  set.seed(9)
+  # Set number of trees in RF
+  n_tree = 1000
+  # Construct random forest model
+  rf_list$pathCov$model = randomForest(x=pathCov_train,y=clin$Response, ntree = n_tree ,importance = TRUE)
+  
+  # Save confusion matrix
+  rf_list$pathCov$confusion = rf_list$pathCov$model$confusion
+  # View the most important (Mean decrease of GINI impurity) features for prediction
+  rf_list$pathCov$topPredictors <- data.frame(importance(rf_list$pathCov$model, type = 2)) %>%
+  rownames_to_column('Pathway') %>%
+  arrange(desc(MeanDecreaseGini))
+  rf_list$pathCov$topPredictors = rf_list$pathCov$topPredictors[1:100,]
+}
+```
+
+Let's evaluate our models, we have 12 in total (3 omics levels across 4 studies).
+
+Gene abundance ROC curves
+```{r}
+for (i in 1:length(studies)) {
+  # Generate ROC-curve for training data
+  roc_gene_study = roc(as.factor(clin$Response),rf_list[[i]]$votes[,2])
+  plot(roc_gene_study)
+  auc(roc_gene_study)
+}
+```
+
+Pathway abundance ROC curves
+```{r}
+for (i in 1:length(studies)) {
+  # Generate ROC-curve for training data
+  roc_path_study = roc(as.factor(clin$Response),rf_path_study[[i]]$votes[,2])
+  plot(roc_path_study)
+  auc(roc_path_study)
+}
+```
+
+Pathway coverage ROC curves
+```{r}
+for (i in 1:length(studies)) {
+  # Generate ROC-curve for training data
+  roc_pathCov_study = roc(as.factor(clin$Response),rf_pathCov_study[[i]]$votes[,2])
+  print(paste0(studies[i], " et al."))
+  auc(roc_pathCov_study)
+  plot(roc_pathCov_study)
+}
+```
+
+Top predictors for each omics type in each study
+
+Gene abundance level
+```{r}
+
+```
 
 ### TO-DO
 
@@ -533,4 +1066,3 @@ __Function of most important UniRef90 sequences enriched in R__
 * combine data
 * PCA clusters???
 * 
-
