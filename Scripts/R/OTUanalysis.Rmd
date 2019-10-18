@@ -407,6 +407,9 @@ Select taxonomic level:
 ```{r}
 physeq_f_level = taxa_level(physeq_f, which_level = "Species")
 
+# Use only melanoma data
+physeq_f_level = subset_samples(physeq_f_level, Study != "Routy_et_al")
+
 OTU_filtered = as.matrix(t(as.data.frame(otu_table(physeq_f_level))))
 ```
 
@@ -432,12 +435,18 @@ for (i in 1:nrow(OTU_filtered)) {
 diffOTUs = diffOTUs[order(diffOTUs$pvalue),]
 # Keep only significant microbes (P < 0.05)
 diffOTUs = diffOTUs[diffOTUs$pvalue < 0.05,]
+# Remove NAs
+diffOTUs = diffOTUs[!is.na(diffOTUs$pvalue),]
+
+
 
 # Lets make a heatmap of the top differentially abundant microbes
 hm.data = log10(OTU_filtered[rownames(diffOTUs),]+1e-10)
+
+rownames(hm.data) = gsub(" \\[.*","", rownames(hm.data))
 # Create annotations for heatmap
-ha = HeatmapAnnotation(Response = as.factor(gsub(".*_R","R",gsub(".*_NR","NR",colnames(OTU)))),
-                       Study = as.factor(substr(colnames(OTU), start = 6, stop = 8)),
+ha = HeatmapAnnotation(Response = as.factor(gsub(".*_R","R",gsub(".*_NR","NR",colnames(OTU_filtered)))),
+                       Study = as.factor(substr(colnames(OTU_filtered), start = 6, stop = 8)),
                        col = list(Response = c(NR ="violetred", R = "darkturquoise"),
                                   Study = c(Gop = "burlywood1",Fra = "indianred1", Mat = "firebrick4", Rou = "chocolate")))
 # Define color palette
@@ -450,11 +459,11 @@ hm = Heatmap(hm.data,
         clustering_distance_rows = "euclidean",
         clustering_distance_columns = "euclidean",
         show_column_names = FALSE,
-        width = unit(20, "cm"),
-        height = unit(5, "cm"),
+        width = unit(10, "cm"),
+        height = unit(10, "cm"),
         top_annotation = ha,
         col = col_fun,
-        column_dend_height = unit(50, "mm"))
+        column_dend_height = unit(25, "mm"))
 
 # Add boxplots to each row
 rg = range(hm.data)
@@ -782,7 +791,8 @@ p_RFperf = ggplot(data = plotData, aes(x = n_tree, y = AUC)) +
   ylab("AUC") +
   ggtitle("Random forest on OTU matrix") +
   theme(plot.title = element_text(face="bold")) +
-  theme(text = element_text(family = "Helvetica"))
+  theme(text = element_text(family = "Helvetica")) +
+  theme(aspect.ratio=1)
 p_RFperf
 ```
 
