@@ -4,11 +4,11 @@ library(ape)
 # ==== IMPORT DATA ====
 
 # Abundance table for each OTU
-OTU = readRDS("/Users/angelol/Documents/PhD/Gut-microbiome-immunotherapy/data/Abundance_tables/OTU.rds")
+OTU = readRDS("/Users/angelol/Documents/PhD/Gut-microbiome-immunotherapy/data/Abundance_tables/val_OTU.rds")
 # Clinical metadata
-clin = readRDS("/Users/angelol/Documents/PhD/Gut-microbiome-immunotherapy/Metadata/Processed_metadata/clin.rds")
+clin = readRDS("/Users/angelol/Documents/PhD/Gut-microbiome-immunotherapy/Metadata/Processed_metadata/val_clin.rds")
 # Pyholgenetic metadata
-phylo_meta = readRDS("/Users/angelol/Documents/PhD/Gut-microbiome-immunotherapy/Metadata/Processed_metadata/phylo_meta.rds")
+phylo_meta = readRDS("/Users/angelol/Documents/PhD/Gut-microbiome-immunotherapy/Metadata/Processed_metadata/val_phylo_meta.rds")
 # Tree file
 mOTUs_tree = read.tree(file = "/Users/angelol/Documents/PhD/Gut-microbiome-immunotherapy/data/Tree_files/mOTUs.treefile")
 
@@ -47,4 +47,4 @@ physeq = merge_phyloseq(physeq,sampledata)
 
 # ==== SAVE DATA ====
 
-saveRDS(physeq, file = "/Users/angelol/Documents/PhD/Gut-microbiome-immunotherapy/data/Abundance_tables/physeq.rds")
+saveRDS(physeq, file = "/Users/angelol/Documents/PhD/Gut-microbiome-immunotherapy/data/Abundance_tables/val_physeq.rds")

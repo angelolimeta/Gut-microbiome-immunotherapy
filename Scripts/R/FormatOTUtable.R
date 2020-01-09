@@ -2,9 +2,9 @@
 
 # Remember to manually remove the "#" character in the heading of the .motus file
 # This has already been done for the files that are imported below
-OTU <- read.delim("~/Documents/PhD/Gut-microbiome-immunotherapy/data/motus_files_merged_raw/all.motus", header=TRUE, stringsAsFactors=FALSE)
+OTU <- read.delim("~/Documents/PhD/Gut-microbiome-immunotherapy/data/motus_files_merged_raw/validation.txt", header=TRUE, stringsAsFactors=FALSE)
 
-clin = readRDS(file = "/Users/angelol/Documents/PhD/Gut-microbiome-immunotherapy/Metadata/Processed_metadata/clin.rds")
+clin = readRDS(file = "/Users/angelol/Documents/PhD/Gut-microbiome-immunotherapy/Metadata/Processed_metadata/val_clin.rds")
 
 # == TIDY DATA ==
 
@@ -30,5 +30,5 @@ OTU = OTU[,grepl("p",colnames(OTU))]
 
 # == SAVE DATA ==
 
-saveRDS(OTU, file = "/Users/angelol/Documents/PhD/Gut-microbiome-immunotherapy/data/Abundance_tables/OTU.rds")
-saveRDS(phylo_meta, file = "/Users/angelol/Documents/PhD/Gut-microbiome-immunotherapy/Metadata/Processed_metadata/phylo_meta.rds")
+saveRDS(OTU, file = "/Users/angelol/Documents/PhD/Gut-microbiome-immunotherapy/data/Abundance_tables/val_OTU.rds")
+saveRDS(phylo_meta, file = "/Users/angelol/Documents/PhD/Gut-microbiome-immunotherapy/Metadata/Processed_metadata/val_phylo_meta.rds")

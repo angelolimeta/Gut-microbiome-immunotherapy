@@ -1,0 +1,174 @@
+---
+title: "Microbiome composition analysis in cancer immunotherapy patients"
+output:
+  html_document:
+    df_print: kable
+    toc: true
+    toc_float: true
+---
+
+## Set working directory
+```{r setup, include=FALSE, echo=FALSE}
+require("knitr")
+opts_knit$set(root.dir = "/Users/angelol/Documents/PhD/Gut-microbiome-immunotherapy/")
+```
+
+
+## Load packages
+```{r, echo=FALSE}
+library(ggplot2)
+library(Rtsne)
+library(phyloseq)
+library(ape)
+library(gridExtra)
+library(svglite) # Requires Cairo. Run "brew install cairo" if on a mac
+library(pheatmap)
+library(RColorBrewer)
+library(dplyr)
+library(DESeq2)
+library(reshape2)
+library(tibble)
+
+#library(devtools)
+#install_github("opisthokonta/tsnemicrobiota")
+library(tsnemicrobiota)
+
+#BiocManager::install("GO.db")
+#BiocManager::install("impute")
+#BiocManager::install("preprocessCore")
+#install_github("umerijaz/microbiomeSeq") 
+library(microbiomeSeq)
+
+library(igraph)
+library(visNetwork)
+
+library(ComplexHeatmap)
+library(circlize)
+
+```
+
+
+## Load data
+
+```{r}
+# TRAINING
+
+# Phyloseq object (Both abundance and taxonomic info)
+physeq = readRDS("./data/Abundance_tables/physeq.rds")
+# Abundance table for each OTU
+OTU = readRDS("./data/Abundance_tables/OTU.rds")
+# Clinical metadata
+clin = readRDS("./Metadata/Processed_metadata/clin.rds")
+
+# VALIDATION
+# Phyloseq object (Both abundance and taxonomic info)
+physeq = readRDS("./data/Abundance_tables/val_physeq.rds")
+# Abundance table for each OTU
+val_OTU = readRDS("./data/Abundance_tables/OTU.rds")
+# Clinical metadata
+val_clin = readRDS("./Metadata/Processed_metadata/clin.rds")
+```
+
+## Pre-process data
+
+Let's filter out microbes that are not identified across at least 5 samples and convert to relative abundance
+```{r, echo=FALSE}
+physeq_f = filter_taxa(physeq, function(x) sum(x > 0) > 5, TRUE)
+physeq_f = transform_sample_counts(physeq_f, function(x) x/sum(x))
+
+
+OTU = apply(OTU, 2, function(x){x/sum(x)})
+# Filter out microbes that are not identified across at least 5 samples
+OTU_filtered = OTU[apply(OTU, 1, function(x) sum(x > 0)) > 5,]
+# Sort according to most abundant OTUs
+OTU_filtered = OTU_filtered[order(rowSums(OTU_filtered),decreasing = TRUE),]
+```
+
+##Explore data
+
+Let's first visualize differences in microbial composition across patients using PCoA.
+We will use weighted UNIFRAC as our distance matrix.
+```{r}
+# Calculate weighted UniFrac distances between all filtered samples
+distance.matrix = UniFrac(physeq_f,weighted = TRUE)
+# Perform PCoA
+PCoA = cmdscale(distance.matrix, eig = TRUE, x.ret = TRUE)
+# Extract variance information for each PCoA axis
+PCoA.variance = round(PCoA$eig/sum(PCoA$eig)*100, 1)
+# Extract values for each component
+PCoA.values = PCoA$points
+# Format data for ggplot
+PCoA.data = data.frame(Sample = rownames(PCoA.values),
+                       X = PCoA.values[,1],
+                       Y = PCoA.values[,2],
+                       Response = gsub(".*_R","R",gsub(".*_NR","NR",rownames(PCoA.values))))
+
+# Call ggplot
+p_MDS = ggplot(data = PCoA.data, aes(x = X, y = Y)) +
+  geom_point(size = 2, aes(color = Response)) +
+  stat_ellipse(aes(color = Response, group = Response),size = 1, linetype = 1) +
+  xlab(paste("MDS1: ", PCoA.variance[1],"%", sep = "")) +
+  ylab(paste("MDS2: ", PCoA.variance[2],"%", sep = "")) +
+  ggtitle("Validation dataset") +
+  theme_classic() +
+  theme(plot.title = element_text(face="bold")) +
+  theme(text = element_text(family = "Helvetica")) +
+  theme(axis.text.x=element_blank(),
+        axis.text.y=element_blank()) +
+  theme(aspect.ratio=1) +
+  scale_color_manual(values=c("violetred", "darkturquoise"))
+p_MDS
+
+# Perform the analysis for all studies separately
+studies = c("Gopalakrishnan","Matson","Frankel","Routy")
+# Initialize empty plot list
+p_list = list()
+for (i in 1:length(studies)) {
+  local({
+    #Sets local enviroment in order to not overwrite plot data
+    
+    # Extract three letter study ID
+    study_id = substr(studies[i], start = 1, stop = 3)
+    # Subset OTU_filtered matrix
+    physeq_f_study = prune_samples(samples = grepl(study_id, sample_names(physeq_f)), physeq_f)
+    # Calculate weighted UniFrac distances between all filtered samples
+    distance.matrix = UniFrac(physeq_f_study, weighted = TRUE)
+    # Perform PCoA
+    PCoA = cmdscale(distance.matrix, eig = TRUE, x.ret = TRUE)
+    # Extract variance information for each PCoA axis
+    PCoA.variance = round(PCoA$eig / sum(PCoA$eig) * 100, 1)
+    # Extract values for each component
+    PCoA.values = PCoA$points
+    # Format data for ggplot
+    PCoA.data = data.frame(
+      Sample = rownames(PCoA.values),
+      X = PCoA.values[, 1],
+      Y = PCoA.values[, 2],
+      Response = gsub(".*_R", "R", gsub(".*_NR", "NR", rownames(PCoA.values)))
+    )
+    # Call ggplot
+    p_MDS_study = ggplot(data = PCoA.data, aes(x = X, y = Y)) +
+      geom_point(size = 2,
+                 aes(color = Response),
+                 show.legend = FALSE) +
+      stat_ellipse(aes(X, Y, color = Response, group = Response), show.legend = FALSE) +
+      xlab(paste("MDS1: ", PCoA.variance[1], "%", sep = "")) +
+      ylab(paste("MDS2: ", PCoA.variance[2], "%", sep = "")) +
+      ggtitle(paste(studies[i], " et al.", sep = "")) +
+      theme_classic() +
+      theme(plot.title = element_text(face = "bold")) +
+      theme(text = element_text(family = "Helvetica")) +
+      theme(axis.text.x = element_blank(),
+            axis.text.y = element_blank()) +
+      theme(aspect.ratio = 1) +
+      scale_color_manual(values = c("violetred", "darkturquoise"))
+    # Save to plot list
+    p_list[[i]] <<- p_MDS_study
+  })
+}
+
+p_all_study = grid.arrange(grobs = p_list,
+                           layout_matrix = rbind(c(1, 2),
+                                                 c(3, 4)))
+
+```
