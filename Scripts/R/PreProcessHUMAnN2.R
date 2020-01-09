@@ -9,23 +9,24 @@ library("data.table")
 # ==== IMPORT DATA ====
 
 # Gene abundance table, values are in RPK
-geneAbundance = fread("~/Documents/PhD/Gut-microbiome-immunotherapy/data/humann2/all_genefamilies.tsv", sep= "\t") %>% as_tibble
+geneAbundance = fread("~/Documents/PhD/Gut-microbiome-immunotherapy/data/humann2/validation_gene.tsv", sep= "\t") %>% as_tibble
 
 # Pathway abundance table
-pathAbundance = as.data.frame(read_delim("~/Documents/PhD/Gut-microbiome-immunotherapy/data/humann2/all_pathabundance.tsv", 
+pathAbundance = as.data.frame(read_delim("~/Documents/PhD/Gut-microbiome-immunotherapy/data/humann2/validation_pathab.tsv", 
                                          "\t", escape_double = FALSE, trim_ws = TRUE))
 
 # Pathway coverage table
-pathCoverage = as.data.frame(read_delim("~/Documents/PhD/Gut-microbiome-immunotherapy/data/humann2/all_pathcoverage.tsv", 
+pathCoverage = as.data.frame(read_delim("~/Documents/PhD/Gut-microbiome-immunotherapy/data/humann2/validation_pathcov.tsv", 
                                         "\t", escape_double = FALSE, trim_ws = TRUE))
 
 # ==== SET PARAMS FOR FILTERING ====
 
 # We have 159 non-responders and 71 responders
+# Responders comprise 30% of the data
 
-PREVALENCE_THR = 0.15 # gene should be present in 15% of all samples
+PREVALENCE_THR = 0.15 # gene should be present in 30% of all samples
 ABUNDANCE_THR = 1e-5 # genes with an RPK value of above 1e-5 count as present
-PATH_PREVALENCE_THR = 0.15 # pathway should be present in 15% of all samples
+PATH_PREVALENCE_THR = 0.15 # pathway should be present in 30% of all samples
 
 # ==== PROCESS MERGED TABLES ====
 
@@ -80,7 +81,7 @@ geneAbundance_merged_filtered = geneAbundance_merged_filtered[,-1]
 ###################
 
 # Pathway abundance table
-pathAbundance = as.data.frame(read_delim("~/Documents/PhD/Gut-microbiome-immunotherapy/data/humann2/all_pathabundance.tsv", 
+pathAbundance = as.data.frame(read_delim("~/Documents/PhD/Gut-microbiome-immunotherapy/data/humann2/validation_pathab.tsv", 
                                          "\t", escape_double = FALSE, trim_ws = TRUE))
 
 # Remove microbe annotation from pathway column
@@ -96,7 +97,7 @@ colnames(pathAbundance_merged) = gsub("\\_.*","",colnames(pathAbundance_merged))
 # Convert to CoPM
 pathAbundance_merged = apply(pathAbundance_merged, 2, function(x){(x*1e6)/sum(x)})
 
-# Filter out pathways not found in less than 20% of samples
+# Filter out pathways not found in less than PREVALENCE_THR of samples
 pathAbundance_merged_filtered = as.data.frame(pathAbundance_merged[apply(pathAbundance_merged, 1, function(x) sum(x > ABUNDANCE_THR)) > PATH_PREVALENCE_THR*ncol(pathAbundance_merged),])
 
 
@@ -105,7 +106,7 @@ pathAbundance_merged_filtered = as.data.frame(pathAbundance_merged[apply(pathAbu
 ##################
 
 # Pathway coverage table
-pathCoverage = as.data.frame(read_delim("~/Documents/PhD/Gut-microbiome-immunotherapy/data/humann2/all_pathcoverage.tsv", 
+pathCoverage = as.data.frame(read_delim("~/Documents/PhD/Gut-microbiome-immunotherapy/data/humann2/validation_pathcov.tsv", 
                                         "\t", escape_double = FALSE, trim_ws = TRUE))
 
 # Remove microbe annotation from pathway column
@@ -118,13 +119,13 @@ pathCoverage_merged = pathCoverage_merged[,-1]
 colnames(pathCoverage_merged) = gsub("se_","",colnames(pathCoverage_merged))
 colnames(pathCoverage_merged) = gsub("\\_.*","",colnames(pathCoverage_merged))
 
-# Filter out pathways found in less than 20% of samples
+# Filter out pathways found in less than PATH_PREVALENCE_THR of samples
 pathCoverage_merged_filtered = as.data.frame(pathCoverage_merged[apply(pathCoverage_merged, 1, function(x) sum(x > 0)) > PATH_PREVALENCE_THR*ncol(pathCoverage_merged),])
 
 # ==== ANNOTATE SAMPLES ====
 
 # Load clinical metadata
-clin = readRDS("/Users/angelol/Documents/PhD/Gut-microbiome-immunotherapy/Metadata/Processed_metadata/clin.rds")
+clin = readRDS("/Users/angelol/Documents/PhD/Gut-microbiome-immunotherapy/Metadata/Processed_metadata/val_clin.rds")
 
 # Remove the 5 repeat samples from Frankel et al data
 SamplesToRemove = colnames(pathAbundance_merged)[which(!(colnames(pathAbundance_merged) %in% clin$Sample_id))]
@@ -155,8 +156,8 @@ print(pathAbundance_merged_filtered[1:10,1:10])
 print(pathCoverage_merged_filtered[1:10,1:10])
 
 # ==== SAVE DATA ====
-saveRDS(geneAbundance_merged_filtered, file = "/Users/angelol/Documents/PhD/Gut-microbiome-immunotherapy/data/humann2/geneAbundance_merged_filtered.rds")
-saveRDS(pathAbundance_merged_filtered, file = "/Users/angelol/Documents/PhD/Gut-microbiome-immunotherapy/data/humann2/pathAbundance_merged_filtered.rds")
-saveRDS(pathCoverage_merged_filtered, file = "/Users/angelol/Documents/PhD/Gut-microbiome-immunotherapy/data/humann2/pathCoverage_merged_filtered.rds")
+saveRDS(geneAbundance_merged_filtered, file = "/Users/angelol/Documents/PhD/Gut-microbiome-immunotherapy/data/humann2/geneAbundance_merged_filtered_UniRef50_lowTHR.rds")
+saveRDS(pathAbundance_merged_filtered, file = "/Users/angelol/Documents/PhD/Gut-microbiome-immunotherapy/data/humann2/pathAbundance_merged_filtered_UniRef50_lowTHR.rds")
+saveRDS(pathCoverage_merged_filtered, file = "/Users/angelol/Documents/PhD/Gut-microbiome-immunotherapy/data/humann2/pathCoverage_merged_filtered_UniRef50_lowTHR.rds")
 
 
