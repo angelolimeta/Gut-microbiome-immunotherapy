@@ -1,0 +1,937 @@
+---
+title: "Microbiome composition analysis in cancer immunotherapy patients"
+output:
+  html_document:
+    df_print: kable
+    toc: true
+    toc_float: true
+---
+
+## Set working directory
+```{r setup, include=FALSE, echo=FALSE}
+require("knitr")
+opts_knit$set(root.dir = "/Users/angelol/Documents/PhD/Gut-microbiome-immunotherapy/")
+```
+
+
+## Load packages
+```{r, echo=FALSE}
+library(ggplot2)
+library(Rtsne)
+library(phyloseq)
+library(ape)
+library(gridExtra)
+library(svglite) # Requires Cairo. Run "brew install cairo" if on a mac
+library(pheatmap)
+library(RColorBrewer)
+library(dplyr)
+library(DESeq2)
+library(reshape2)
+library(tibble)
+
+#library(devtools)
+#install_github("opisthokonta/tsnemicrobiota")
+library(tsnemicrobiota)
+
+#BiocManager::install("GO.db")
+#BiocManager::install("impute")
+#BiocManager::install("preprocessCore")
+#install_github("umerijaz/microbiomeSeq") 
+library(microbiomeSeq)
+
+library(igraph)
+library(visNetwork)
+
+library(ComplexHeatmap)
+library(circlize)
+
+library(ggsci)
+
+library(randomForest)
+library(pROC)
+
+```
+
+## Load data
+
+```{r}
+# Phyloseq object (Both abundance and taxonomic info)
+physeq = readRDS("./data/Abundance_tables/physeq.rds")
+
+# Abundance table for each OTU
+OTU = readRDS("./data/Abundance_tables/OTU.rds")
+# Clinical metadata
+clin = readRDS("./Metadata/Processed_metadata/clin.rds")
+# Pyholgenetic metadata
+phylo_meta = readRDS("./Metadata/Processed_metadata/phylo_meta.rds")
+```
+
+## Pre-process data
+
+Let's filter out microbes that are not identified across at least 5 samples and convert to relative abundance
+```{r, echo=FALSE}
+physeq_f = transform_sample_counts(physeq, function(x) x/sum(x))
+physeq_f = filter_taxa(physeq_f, function(x) sum(x > 0) > 5, TRUE)
+
+
+OTU = apply(OTU, 2, function(x){x/sum(x)})
+# Filter out microbes that are not identified across at least 5 samples
+OTU_filtered = OTU[apply(OTU, 1, function(x) sum(x > 0)) > 5,]
+# Sort according to most abundant OTUs
+OTU_filtered = OTU_filtered[order(rowSums(OTU_filtered),decreasing = TRUE),]
+```
+
+Keep only melanoma data
+```{r}
+physeq = subset_samples(physeq, Study != "Routy_et_al")
+physeq_f = subset_samples(physeq_f, Study != "Routy_et_al")
+OTU = OTU[grepl("Rou", colnames(OTU))]
+clin = clin %>% filter(Study != "Routy_et_al")
+```
+
+
+##Explore data
+
+Let's first visualize differences in microbial composition across patients using PCoA.
+We will use weighted UNIFRAC as our distance matrix.
+```{r}
+# Calculate weighted UniFrac distances between all filtered samples
+distance.matrix = UniFrac(physeq_f,weighted = TRUE)
+# Perform PCoA
+PCoA = cmdscale(distance.matrix, eig = TRUE, x.ret = TRUE)
+# Extract variance information for each PCoA axis
+PCoA.variance = round(PCoA$eig/sum(PCoA$eig)*100, 1)
+# Extract values for each component
+PCoA.values = PCoA$points
+# Format data for ggplot
+PCoA.data = data.frame(Sample = rownames(PCoA.values),
+                       X = PCoA.values[,1],
+                       Y = PCoA.values[,2],
+                       Response = gsub(".*_R","R",gsub(".*_NR","NR",rownames(PCoA.values))),
+                       Study = gsub(".*_Rou_.*","Routy",(gsub(".*_Gop_.*","Gopalakrishnan",gsub(".*_Mat_.*","Matson",gsub(".*_Fra_.*","Frankel",rownames(PCoA.values)))))))
+
+# Call ggplot
+p_MDS = ggplot(data = PCoA.data, aes(x = X, y = Y)) +
+  geom_point(size = 2, aes(color = Response, shape = Study)) +
+  stat_ellipse(aes(color = Response, group = Response),size = 1, linetype = 1) +
+  stat_ellipse(aes(group = Study), linetype = 3, color = "grey70") +
+  xlab(paste("MDS1: ", PCoA.variance[1],"%", sep = "")) +
+  ylab(paste("MDS2: ", PCoA.variance[2],"%", sep = "")) +
+  ggtitle("All samples") +
+  theme_classic() +
+  theme(plot.title = element_text(face="bold")) +
+  theme(text = element_text(family = "Helvetica")) +
+  theme(axis.text.x=element_blank(),
+        axis.text.y=element_blank()) +
+  theme(aspect.ratio=1) +
+  scale_color_manual(values=c("violetred", "darkturquoise"))
+p_MDS
+ggsave(p_MDS, width = 6, height = 6, filename = "../Gut-microbiome-immunotherapy/Figures/MelMDS.svg" )
+# Perform the analysis for all studies separately
+studies = c("Gopalakrishnan","Matson","Frankel")
+# Initialize empty plot list
+p_list = list()
+for (i in 1:length(studies)) {
+  local({
+    #Sets local enviroment in order to not overwrite plot data
+    
+    # Extract three letter study ID
+    study_id = substr(studies[i], start = 1, stop = 3)
+    # Subset OTU_filtered matrix
+    physeq_f_study = prune_samples(samples = grepl(study_id, sample_names(physeq_f)), physeq_f)
+    # Calculate weighted UniFrac distances between all filtered samples
+    distance.matrix = UniFrac(physeq_f_study, weighted = TRUE)
+    # Perform PCoA
+    PCoA = cmdscale(distance.matrix, eig = TRUE, x.ret = TRUE)
+    # Extract variance information for each PCoA axis
+    PCoA.variance = round(PCoA$eig / sum(PCoA$eig) * 100, 1)
+    # Extract values for each component
+    PCoA.values = PCoA$points
+    # Format data for ggplot
+    PCoA.data = data.frame(
+      Sample = rownames(PCoA.values),
+      X = PCoA.values[, 1],
+      Y = PCoA.values[, 2],
+      Response = gsub(".*_R", "R", gsub(".*_NR", "NR", rownames(PCoA.values)))
+    )
+    # Call ggplot
+    p_MDS_study = ggplot(data = PCoA.data, aes(x = X, y = Y)) +
+      geom_point(size = 2,
+                 aes(color = Response),
+                 show.legend = FALSE) +
+      stat_ellipse(aes(X, Y, color = Response, group = Response), show.legend = FALSE) +
+      xlab(paste("MDS1: ", PCoA.variance[1], "%", sep = "")) +
+      ylab(paste("MDS2: ", PCoA.variance[2], "%", sep = "")) +
+      ggtitle(paste(studies[i], " et al.", sep = "")) +
+      theme_classic() +
+      theme(plot.title = element_text(face = "bold")) +
+      theme(text = element_text(family = "Helvetica")) +
+      theme(axis.text.x = element_blank(),
+            axis.text.y = element_blank()) +
+      theme(aspect.ratio = 1) +
+      scale_color_manual(values = c("violetred", "darkturquoise"))
+    # Save to plot list
+    p_list[[i]] <<- p_MDS_study
+  })
+}
+
+p_all_study = grid.arrange(grobs = p_list,
+                           layout_matrix = rbind(c(1, 2),
+                                                 c(3, 4)))
+
+```
+
+Let's also try manifold learning using t-SNE with weighted UniFrac.
+
+```{r}
+#Perform tSNE on filtered samples
+set.seed(9)
+tsne_res = tsne_phyloseq(physeq_f, distance='wunifrac',
+                     perplexity = 20, verbose=0, rng_seed = 9)
+
+tsne.data = data.frame(Sample = sample_names(physeq_f),
+                       X = tsne_res$tsne$par[,1],
+                       Y = tsne_res$tsne$par[,2],
+                       Response = gsub(".*_R","R",gsub(".*_NR","NR",sample_names(physeq_f))),
+                       Study = gsub(".*_Rou_.*","Routy",(gsub(".*_Gop_.*","Gopalakrishnan",gsub(".*_Mat_.*","Matson",gsub(".*_Fra_.*","Frankel",rownames(PCoA.values)))))))
+# Call ggplot
+p_tsne <- ggplot(tsne.data, aes(x=X, y=Y)) +
+  geom_point(size = 2, aes(color = Response, shape = Study)) +
+  stat_ellipse(aes(color = Response, group = Response),size = 1, linetype = 1) +
+  stat_ellipse(aes(group = Study), linetype = 3, color = "grey70") +
+  xlab("t-SNE 1") +
+  ylab("t-SNE 2") +
+  ggtitle("All samples") +
+  theme_classic() +
+  theme(plot.title = element_text(face="bold")) +
+  theme(text = element_text(family = "Helvetica")) +
+  theme(axis.text.x=element_blank(),
+        axis.text.y=element_blank()) +
+  theme(aspect.ratio=1) +
+  scale_color_manual(values=c("violetred", "darkturquoise"))
+p_tsne
+
+# Perform the analysis for all studies separately
+studies = c("Gopalakrishnan","Matson","Frankel")
+# Initialize empty plot list
+p_list_tsne = list()
+for (i in 1:length(studies)) {
+  local({ #Sets local enviroment in order to not overwrite plot data
+    
+    # Extract three letter study ID
+    study_id = substr(studies[i], start = 1, stop = 3)
+    # Subset OTU_filtered matrix
+    physeq_f_study = prune_samples(samples = grepl(study_id,sample_names(physeq_f)), physeq_f)
+    # Perform tSNE
+    tsne_res = tsne_phyloseq(physeq_f_study, distance='wunifrac',
+                             perplexity = 20, verbose=0, rng_seed = 9)
+    # Format data for ggplot
+    tsne.data = data.frame(Sample = sample_names(physeq_f_study),
+                           X = tsne_res$tsne$par[,1],
+                           Y = tsne_res$tsne$par[,2],
+                           Response = gsub(".*_R","R",gsub(".*_NR","NR",sample_names(physeq_f_study))))
+    # Call ggplot
+    p_tsne_study <- ggplot(tsne.data, aes(x=X, y=Y)) +
+      geom_point(size = 2, aes(color = Response)) +
+      stat_ellipse(aes(color = Response, group = Response),size = 1, linetype = 1) +
+      xlab("t-SNE 1") +
+      ylab("t-SNE 2") +
+      ggtitle(paste(studies[i]," et al.", sep = "")) +
+      theme_classic() +
+      theme(plot.title = element_text(face="bold")) +
+      theme(text = element_text(family = "Helvetica")) +
+      theme(axis.text.x=element_blank(),
+            axis.text.y=element_blank()) +
+      theme(aspect.ratio=1) +
+      scale_color_manual(values=c("violetred", "darkturquoise"))
+    # Save to plot list
+    p_list_tsne[[i]] <<- p_tsne_study
+  })
+}
+
+grid.arrange(
+  grobs = p_list_tsne,
+  layout_matrix = rbind(c(1, 2),
+                        c(3, 4))
+)
+```
+
+## Alpha diversity
+
+```{r}
+p_diversity = plot_anova_diversity(physeq, method = c("shannon", "richness","simpson","fisher"), grouping_column = "Response", pValueCutoff = 0.05)
+
+p_diversity_study = plot_anova_diversity(physeq, method = c("shannon", "richness","simpson","fisher"), grouping_column = "Study", pValueCutoff = 0.05)
+
+p_diversity
+p_diversity_study
+
+ggsave(p_diversity,filename = "./Figures/Diversity2.svg")
+ggsave(p_diversity_study, filename = "./Figures/Diversity_study.svg")
+```
+
+Let's also check differences for each study
+```{r}
+studies = c("Gopalakrishnan","Matson","Frankel")
+
+# Define diversity indeces to be used
+# - Shannon: Estimator of species richness and species evenness, more weight on species richness.
+# - InvSimpson: Estimator of species richness and species evenness, more weight on species evenness.
+# - ACE: Abundance-based Coverage Estimator of species richness.
+# - Chao1: Abundance-based estimator of species richness.
+
+div_index = c("Shannon","InvSimpson","ACE","Chao1")
+# Create empty matrix for storing pvalues for significance testing between R and NR
+pvalue_mat = data.frame(matrix(data = NA,nrow = length(studies), ncol = length(div_index)))
+rownames(pvalue_mat) = studies
+colnames(pvalue_mat) = div_index
+p_list = list()
+for (i in 1:length(studies)) {
+  local({ #Sets local enviroment in order to not overwrite plot data
+    # Extract three letter study ID
+    study_id = substr(studies[i], start = 1, stop = 3)
+    # Subset OTU_filtered matrix
+    physeq_f_study = prune_samples(samples = grepl(study_id,sample_names(physeq)), physeq)
+    for (j in 1:length(div_index)) {
+      #Calculate alpha diversity
+      alpha_div_study = estimate_richness(physeq_f_study, measures = div_index[j]) 
+      # Extract diversities for responders and non responders
+      R_div_study = as.numeric(alpha_div_study[grepl("_R",rownames(alpha_div_study)),1])
+      NR_div_study = as.numeric(alpha_div_study[grepl("_NR",rownames(alpha_div_study)),1])
+      # Perform wilcoxon rank sum test
+      pvalue_mat[i,j] <<- wilcox.test(R_div_study, NR_div_study, alternative = "two.sided")$p.value
+    }
+    # Create y-axis label for grid.arrange
+    if(i==1){label = "Index value"}
+    else{label = ""}
+    # Plot alpha diversity (Shannon only)
+    p_study = plot_richness(physeq_f_study,x = "Response", measures = "Shannon", color = "Response") +
+      #geom_boxplot() +
+      theme(legend.position = "none") +
+      ylab(label) +
+      xlab("")
+    # Save to plot list
+    p_list[[i]] <<- p_study
+  })
+}
+
+p_all = grid.arrange(grobs = p_list,
+                     layout_matrix = rbind(c(1, 2, 3, 4),
+                                           c(1, 2, 3, 4))
+)
+
+```
+
+## Distributions of taxa
+
+Let's produce barplots in order to visualise differences in taxonomic distributions across responders vs non-responders.
+
+```{r, fig.height=10, fig.width=20}
+
+taxlevel = c("Phylum","Order","Family","Genus")
+
+for (i in 1:length(taxlevel)) {
+  physeq_f_level = taxa_level(physeq_f, which_level = taxlevel[i])
+  p_bar = plot_taxa(physeq_f_level, grouping_column = "Response", method = "hellinger", number.taxa = ifelse(i == 1,15,20), filename = NULL)
+
+  # Extract the most present microbe in the data, used for sorting barplots.
+  top_microbe = names(which.max(apply(otu_table(physeq_f_level), 2, sum)))
+  # Order samples according to top microbe
+  top_samples = otu_table(physeq_f_level)[,top_microbe]
+  top_samples = top_samples[order(top_samples, decreasing = TRUE)]
+  top_samples = rownames(top_samples)
+  # Re-arrange the factors
+  p_bar$data$Sample = factor(p_bar$data$Sample, levels = top_samples)
+  
+  p_bar = p_bar + 
+    labs(title = paste0("Distribution of taxa at the ", tolower(taxlevel[i]), " level"),
+         subtitle = paste0("Grouped by response")) +
+    xlab("Samples") +
+    ylab("Relative abundance") +
+    theme(
+    strip.background = element_blank(),
+    axis.text = element_blank(),
+    plot.title = element_text(face="bold"),
+    text = element_text(family = "Helvetica"))
+  
+  print(p_bar)
+  #ggsave(p_bar,filename = paste0("./Figures/TaxDist_",taxlevel[i],".svg"))
+}
+```
+
+Phylum barplots
+```{r}
+physeq_f_level = taxa_level(physeq_f, which_level = "Phylum")
+
+phylum_df = as_tibble(as.data.frame(otu_table(physeq_f_level)), rownames = "patient") %>% 
+  pivot_longer(-patient, names_to = "phylum", values_to = "rel_ab") %>%
+  group_by(phylum) %>% 
+  mutate(median_ab_phylum = median(rel_ab)) %>%
+  arrange(desc(median_ab_phylum)) %>%
+  top_n(4, wt = median_ab_phylum) %>%
+  ungroup() %>% 
+  View()
+
+```
+
+
+Let's also group samples by study.
+
+```{r, fig.height=10, fig.width=20}
+
+taxlevel = c("Phylum","Order","Family","Genus")
+
+for (i in 1:length(taxlevel)) {
+  physeq_f_level = taxa_level(physeq_f, which_level = taxlevel[i])
+  
+  p_bar = plot_taxa(physeq_f_level, grouping_column = "Study", method = "hellinger", number.taxa = ifelse(i == 1,15,20), filename = NULL)
+  
+  # Extract the most present microbe in the data, used for sorting barplots.
+  top_microbe = names(which.max(apply(otu_table(physeq_f_level), 2, sum)))
+  # Order samples according to top microbe
+  top_samples = otu_table(physeq_f_level)[,top_microbe]
+  top_samples = top_samples[order(top_samples, decreasing = TRUE)]
+  top_samples = rownames(top_samples)
+  # Re-arrange the factors
+  p_bar$data$Sample = factor(p_bar$data$Sample, levels = top_samples)
+  
+  p_bar = p_bar + 
+    labs(title = paste0("Distribution of taxa at the ", tolower(taxlevel[i]), " level"),
+         subtitle = paste0("Grouped by study")) +
+    xlab("Samples") +
+    ylab("Relative abundance") +
+    theme_bw() +
+    theme(strip.background = element_blank(),
+          axis.text = element_blank(),
+          plot.title = element_text(face="bold"),
+          text = element_text(family = "Helvetica")) +
+    scale_color_grey()
+  
+  print(p_bar)
+}
+```
+
+## Co-occurence analysis
+
+```{r}
+# Select taxonomic level
+physeq_f_level = taxa_level(physeq, which_level = "Genus")
+
+physeq_f_level = subset_samples(physeq_f_level, Study != "Routy_et_al")
+
+
+# Enriched in responders
+co_occr = co_occurence_network(physeq_f_level, grouping_column = "Response", rhos = 0.3, 
+    method = "cor", qval_threshold = 0.05, select.condition = "R", scale.vertex.size = 4, 
+    scale.edge.width = 15, plotNetwork = T, plotBetweennessEeigenvalue = F)
+
+g <- co_occr$net$graph
+data <- toVisNetworkData(g)
+visNetwork(nodes = data$nodes,
+           edges = data$edges,
+           width = 900,
+           height = 900) %>% visOptions(highlightNearest = TRUE, nodesIdSelection = TRUE)
+
+# Enriched in non-responders
+co_occr = co_occurence_network(physeq_f_level, grouping_column = "Response", rhos = 0.3, 
+    method = "cor", qval_threshold = 0.05, select.condition = "NR", scale.vertex.size = 4, 
+    scale.edge.width = 15, plotNetwork = T, plotBetweennessEeigenvalue = F)
+g <- co_occr$net$graph
+data <- toVisNetworkData(g)
+visNetwork(nodes = data$nodes,
+           edges = data$edges,
+           width = 900,
+           height = 900) %>% visOptions(highlightNearest = TRUE, nodesIdSelection = TRUE)
+```
+
+## Differential abundance
+
+Select taxonomic level:
+```{r}
+physeq_f_level = taxa_level(physeq_f, which_level = "Species")
+
+# Use only melanoma data
+physeq_f_level = subset_samples(physeq_f_level, Study != "Routy_et_al")
+
+OTU_filtered = as.matrix(t(as.data.frame(otu_table(physeq_f_level))))
+```
+
+
+```{r,fig.height = 10, fig.width = 15}
+# Initialise empty data frame for storing differentially abundant OTUs
+diffOTUs = data.frame(pvalue = 1:nrow(OTU_filtered), fold_change = 1:nrow(OTU_filtered), taxonomy = phylo_meta[rownames(OTU_filtered),1])
+rownames(diffOTUs) = rownames(OTU_filtered)
+
+# Loop over all OTUs
+for (i in 1:nrow(OTU_filtered)) {
+  # Extract abundances of each OTU for both R and NR
+  R_abundance = as.numeric(OTU_filtered[i,grepl("_R",colnames(OTU_filtered))])
+  NR_abundance = as.numeric(OTU_filtered[i,grepl("_NR",colnames(OTU_filtered))])
+  
+  diffOTUs$pvalue[i] = wilcox.test(R_abundance,NR_abundance, alternative = "two.sided")$p.value
+  diffOTUs$fold_change[i] = log2((median(R_abundance) + 0.001)/(median(NR_abundance) + 0.001))
+}
+
+# Order according to most significant
+diffOTUs = diffOTUs[order(diffOTUs$pvalue),]
+# Save unadjusted pvalues
+diffOTUs_unadj = diffOTUs
+# Adjust for multiple testing
+diffOTUs$pvalue = p.adjust(diffOTUs$pvalue,method = "fdr")
+# Keep only significant microbes (P < 0.05)
+#diffOTUs = diffOTUs[diffOTUs$pvalue < 0.2,]
+# Remove NAs
+diffOTUs[is.na(diffOTUs$pvalue),] = 1
+
+
+
+# Lets make a heatmap of the top differentially abundant microbes
+hm.data = log10(OTU_filtered[rownames(diffOTUs),]+1e-10)
+
+rownames(hm.data) = gsub(" \\[.*","", rownames(hm.data))
+# Create annotations for heatmap
+ha = HeatmapAnnotation(Response = as.factor(gsub(".*_R","R",gsub(".*_NR","NR",colnames(OTU_filtered)))),
+                       Study = as.factor(substr(colnames(OTU_filtered), start = 6, stop = 8)),
+                       col = list(Response = c(NR ="violetred", R = "darkturquoise"),
+                                  Study = c(Gop = "burlywood1",Fra = "indianred1", Mat = "firebrick4", Rou = "chocolate")))
+# Define color palette
+col_fun = colorRamp2(c(-10,-5,-2), c("slateblue4","maroon3","lightyellow"))
+
+# Draw heatmap
+hm = Heatmap(hm.data,
+        name = "log10 rel. ab.",
+        row_names_side = "left",
+        clustering_distance_rows = "euclidean",
+        clustering_distance_columns = "euclidean",
+        show_column_names = FALSE,
+        width = unit(10, "cm"),
+        height = unit(10, "cm"),
+        top_annotation = ha,
+        col = col_fun,
+        column_dend_height = unit(25, "mm"))
+
+# Add boxplots to each row
+rg = range(hm.data)
+pat_groups = as.logical(as.integer(as.factor(gsub(".*_R","R",gsub(".*_NR","NR",colnames(OTU_filtered))))) - 1L)
+anno_multiple_boxplot = function(index) {
+    pushViewport(viewport(xscale = rg, yscale = c(0.5, nrow(hm.data) + 0.5)))
+    for(i in seq_along(index)) {
+        grid.rect(y = nrow(hm.data)-i+1, height = 1, default.units = "native")
+        grid.boxplot(hm.data[index[i], pat_groups], pos = nrow(hm.data)-i+1 + 0.2, box_width = 0.3, 
+            gp = gpar(fill = "darkturquoise"), direction = "horizontal")
+        grid.boxplot(hm.data[ index[i], !pat_groups], pos = nrow(hm.data)-i+1 - 0.2, box_width = 0.3, 
+            gp = gpar(fill = "violetred"), direction = "horizontal")
+    }
+    grid.xaxis()
+    popViewport()
+}
+
+hm = hm + rowAnnotation(boxplot = anno_multiple_boxplot, width =unit(4, "cm"), show_annotation_name = FALSE)
+
+draw(hm)
+```
+
+Let's perform the analysis for all studies separately as well
+```{r,fig.height = 15, fig.width = 20}
+# Routy et al. is omitted due to no significant microbes being detected using our criteria for response
+studies = c("Gopalakrishnan","Matson","Frankel")
+# Initialize empty plot list
+p_list = list()
+for (i in 1:length(studies)) {
+  local({ #Sets local enviroment in order to not overwrite plot data
+    # Extract three letter study ID
+    study_id = substr(studies[i], start = 1, stop = 3)
+    # Pre-process each individual study
+    # Subset the full OTU matrix
+    OTU_filtered_study = OTU_filtered[,grepl(study_id,colnames(OTU_filtered))]
+    # Sort according to most abundant OTUs
+    OTU_filtered_study = OTU_filtered_study[order(rowSums(OTU_filtered_study),decreasing = TRUE),]
+    # Initialise empty data frame for storing differentially abundant OTUs
+    diffOTUs_study = data.frame(pvalue = 1:nrow(OTU_filtered_study),
+                                fold_change = 1:nrow(OTU_filtered_study),
+                                taxonomy = rownames(OTU_filtered_study))
+    rownames(diffOTUs_study) = rownames(OTU_filtered_study)
+    # Loop over all OTUs
+    for (j in 1:nrow(OTU_filtered_study)) {
+      # Extract abundances of each OTU for both R and NR
+      R_abundance = as.numeric(OTU_filtered_study[j,grepl("_R",colnames(OTU_filtered_study))])
+      NR_abundance = as.numeric(OTU_filtered_study[j,grepl("_NR",colnames(OTU_filtered_study))])
+      # Perform wilcoxon rank sum test between responders and non-responders
+      diffOTUs_study$pvalue[j] = wilcox.test(R_abundance,NR_abundance, alternative = "two.sided", exact = FALSE)$p.value
+      diffOTUs_study$fold_change[j] = log2((median(R_abundance) + 0.001)/(median(NR_abundance) + 0.001))
+    }
+    ## Adjust for multiple testing
+    #diffOTUs_study$pvalue = p.adjust(diffOTUs_study$pvalue,method = "fdr")
+    # Remove NaN values
+    diffOTUs_study = diffOTUs_study[!is.na(diffOTUs_study$pvalue),]
+    # Order according to most significant
+    diffOTUs_study = diffOTUs_study[order(diffOTUs_study$pvalue),]
+    # Keep only significant microbes (P < 0.05)
+    diffOTUs_study = diffOTUs_study[diffOTUs_study$pvalue < 0.05,]
+
+    # Lets make a heatmap of the top differentially abundant microbes
+    hm.data = log10(OTU_filtered_study[rownames(diffOTUs_study),]+1e-10)
+    
+    # Create annotations for heatmap
+    ha = HeatmapAnnotation(Response = as.factor(gsub(".*_R","R",gsub(".*_NR","NR",colnames(OTU_filtered_study)))),
+                           col = list(Response = c(NR ="violetred", R = "darkturquoise")),
+                           which = "column")
+    # Define color palette
+    col_fun = colorRamp2(c(-10,-6,-2), c("slateblue4","maroon3","lightyellow"))
+    
+    hm = Heatmap(hm.data,
+                 name = "log10 rel. ab.",
+                 row_labels = as.character(gsub(".*s__","",diffOTUs_study$taxonomy)),
+                 row_names_side = "left",
+                 clustering_distance_rows = "euclidean",
+                 clustering_distance_columns = "euclidean",
+                 show_column_names = FALSE,
+                 width = unit(20, "cm"),
+                 height = unit(20, "cm"),
+                 top_annotation = ha,
+                 col = col_fun,
+                 column_dend_height = unit(20, "mm"))
+    
+    # Add boxplots to each row
+    rg = range(hm.data)
+    pat_groups = as.logical(as.integer(as.factor(gsub(".*_R","R",gsub(".*_NR","NR",colnames(OTU_filtered_study))))) - 1L)
+    anno_multiple_boxplot = function(index) {
+        pushViewport(viewport(xscale = rg, yscale = c(0.5, nrow(hm.data) + 0.5)))
+        for(i in seq_along(index)) {
+            grid.rect(y = nrow(hm.data)-i+1, height = 1, default.units = "native")
+            grid.boxplot(hm.data[index[i], pat_groups], pos = nrow(hm.data)-i+1 + 0.2, box_width = 0.3, 
+                gp = gpar(fill = "darkturquoise"), direction = "horizontal")
+            grid.boxplot(hm.data[ index[i], !pat_groups], pos = nrow(hm.data)-i+1 - 0.2, box_width = 0.3, 
+                gp = gpar(fill = "violetred"), direction = "horizontal")
+        }
+        grid.xaxis()
+        popViewport()
+    }
+    
+    hm = hm + rowAnnotation(boxplot = anno_multiple_boxplot, width =unit(4, "cm"), show_annotation_name = FALSE)
+    # Save to plot list
+    p_list[[i]] <<- hm
+  })
+}
+# Draw heatmap
+for (i in 1:length(p_list)) {
+  draw(p_list[[i]])
+}
+```
+
+Let's also try using Fisher's exact test between R and NR
+
+```{r,fig.height = 10, fig.width = 15}
+# Initialise empty data frame for storing differentially abundant OTUs
+diffOTUs = data.frame(pvalue = 1:nrow(OTU_filtered), taxonomy = phylo_meta[rownames(OTU_filtered),1])
+rownames(diffOTUs) = rownames(OTU_filtered)
+
+# Loop over all OTUs
+for (i in 1:nrow(OTU_filtered)) {
+  # Extract abundances of each OTU for both R and NR
+  R_abundance = as.numeric(OTU_filtered[i,grepl("_R",colnames(OTU_filtered))])
+  NR_abundance = as.numeric(OTU_filtered[i,grepl("_NR",colnames(OTU_filtered))])
+  # Convert to presence/absence
+  R_abundance = R_abundance>0
+  NR_abundance = NR_abundance>0
+  # Create contingency table
+  cont.table = table(data.frame(Response = c(rep("R",length(R_abundance)),rep("NR",length(NR_abundance))),
+                                Presence = c(R_abundance,NR_abundance)))
+  # Perform Fisher's exact test
+  diffOTUs$pvalue[i] = fisher.test(cont.table)$p.value
+}
+
+## Adjust for multiple testing
+#diffOTUs$pvalue = p.adjust(diffOTUs$pvalue,method = "fdr")
+# Order according to most significant
+diffOTUs = diffOTUs[order(diffOTUs$pvalue),]
+# Keep only significant microbes (P < 0.05)
+diffOTUs = diffOTUs[diffOTUs$pvalue < 0.06,]
+
+# Lets make a heatmap of the top differentially abundant microbes
+hm.data = as.matrix(log10(OTU_filtered[rownames(diffOTUs),]+1e-10))
+# Create annotations for heatmap
+ha = HeatmapAnnotation(Response = as.factor(gsub(".*_R","R",gsub(".*_NR","NR",colnames(OTU_filtered)))),
+                       Study = as.factor(substr(colnames(OTU_filtered), start = 6, stop = 8)),
+                       col = list(Response = c(NR ="violetred", R = "darkturquoise"),
+                                  Study = c(Gop = "burlywood1",Fra = "indianred1", Mat = "firebrick4", Rou = "chocolate")))
+# Define color palette
+col_fun = colorRamp2(c(-10,-5,-2), c("slateblue4","maroon3","lightyellow"))
+
+# Draw heatmap
+Heatmap(hm.data,
+        name = "log10 rel. ab.",
+        #row_labels = as.character(gsub(".*s__","",diffOTUs$taxonomy)),
+        clustering_distance_rows = "euclidean",
+        clustering_distance_columns = "euclidean",
+        show_column_names = FALSE,
+        width = unit(20, "cm"),
+        height = unit(5, "cm"),
+        top_annotation = ha,
+        col = col_fun,
+        column_dend_height = unit(50, "mm"))
+
+```
+
+Let's also run DESeq2 on our data
+
+```{r,fig.height = 10, fig.width = 15}
+
+# Convert phyloseq object to DEseq object
+ds_full = phyloseq_to_deseq2(physeq, ~ Study + Treatment + Response)
+# OTU matrix has many zeros. We need to re-estimate the size factors.
+# Iterative normalisation does not converge, lets use poscounts instead.
+ds_full = estimateSizeFactors(ds_full, type = "poscounts")
+# Run DESeq2
+ds_full = DESeq(ds_full, test = "Wald", fitType = "parametric")
+
+# Extract results
+res_full = results(ds_full, cooksCutoff = FALSE)
+# Set p-value threshold and filter out significant OTUs
+alpha = 0.05
+sigTab_full = res_full[which(res_full$padj < alpha),]
+sigTab_full = cbind(as(sigTab_full, "data.frame"), as(tax_table(physeq)[rownames(sigTab_full), ], "matrix"))
+head(sigTab_full)
+
+# Lets make a heatmap of the top differentially abundant microbes
+physeq_norm = transform_sample_counts(physeq, function(x) x/sum(x))
+OTU_norm = as.data.frame(otu_table(physeq_norm))
+
+hm.data = log10(OTU_norm[rownames(sigTab_full),]+1e-10)
+# Create annotations for heatmap
+ha = HeatmapAnnotation(Response = as.factor(gsub(".*_R","R",gsub(".*_NR","NR",colnames(OTU)))),
+                       Study = as.factor(substr(colnames(OTU), start = 6, stop = 8)),
+                       col = list(Response = c(NR ="violetred", R = "darkturquoise"),
+                                  Study = c(Gop = "burlywood1",Fra = "indianred1", Mat = "firebrick4", Rou = "chocolate")))
+# Define color palette
+col_fun = colorRamp2(c(-10,-5,-2), c("slateblue4","maroon3","lightyellow"))
+
+# Draw heatmap
+Heatmap(hm.data,
+        name = "log10 rel. ab.",
+        row_labels = sigTab_full$Species,
+        clustering_distance_rows = "euclidean",
+        clustering_distance_columns = "euclidean",
+        show_column_names = FALSE,
+        width = unit(20, "cm"),
+        height = unit(5, "cm"),
+        top_annotation = ha,
+        col = col_fun,
+        column_dend_height = unit(50, "mm"))
+
+# Store mOTUs IDs for all the significant OTUs
+sigOTUs = rownames(sigTab_full)
+# Subset OTU table in phyloseq object
+physeq_subset = subset(otu_table(physeq_norm), rownames(otu_table(physeq_norm)) %in%  sigOTUs)
+physeq_sig = merge_phyloseq(physeq_subset, tax_table(physeq_norm), sample_data(physeq_norm))
+# Format data for ggplot
+plotData = as.matrix(otu_table(physeq_sig))
+rownames(plotData) = as.character(sigTab_full$Species)
+plotData = melt(plotData)
+plotData = cbind(plotData, Response = gsub(".*_R","R",gsub(".*_NR","NR",plotData$Var2)))
+colnames(plotData) = c("mOTU","Patient","Abundance","Response")
+
+plotData$Abundance = log10(as.numeric(plotData$Abundance) + 1e-8)
+
+p_full = ggplot(data = plotData,aes(x=Response,y=Abundance,color=Response)) +
+  facet_wrap(facets = "mOTU",ncol = 4, scales = "free") +
+  geom_violin() +
+  geom_jitter()
+  
+p_full
+
+
+
+```
+
+## Random forests
+
+Select taxonomic level:
+```{r}
+physeq_f_level = taxa_level(physeq_f, which_level = "Species")
+OTU_filtered = as.matrix(t(as.data.frame(otu_table(physeq_f_level))))
+```
+
+Pre-process data
+```{r}
+# log transform the data
+OTU_filtered = log10(OTU_filtered + 1e-8)
+# Sort according to most abundant OTUs
+OTU_filtered = OTU_filtered[order(rowSums(OTU_filtered),decreasing = TRUE),]
+
+# Split into training and test data
+clin_train = clin %>% filter(Study != "Routy_et_al")
+OTU_train = as.data.frame(t(OTU_filtered[,colnames(OTU_filtered) %in% clin_train$Patient_id]))
+clin_test = clin %>% filter(Study == "Routy_et_al")
+OTU_test = as.data.frame(t(OTU_filtered[,colnames(OTU_filtered) %in% clin_test$Patient_id]))
+
+#Concatenate Treatment, Study and Cancer_type information into data frame
+OTU_train = cbind(OTU_train,
+                  Treatment = clin_train$Treatment,
+                  Study = clin_train$Study,
+                  Cancer_type = clin_train$Cancer_type)
+OTU_test = cbind(OTU_test,
+                  Treatment = clin_test$Treatment,
+                  Study = clin_test$Study,
+                  Cancer_type = clin_test$Cancer_type)
+```
+
+```{r,fig.height = 10, fig.width = 10}
+set.seed(8)
+# Construct random forest model for training data
+rf.OTU <- randomForest(x=OTU_train,y=clin_train$Response, ntree = 10000 ,importance = TRUE)
+# View confusion matrix
+print(rf.OTU$confusion)
+# View the most important (Mean decrease of GINI impurity) features for prediction
+rf.OTU.importance <- data.frame(importance(rf.OTU, type = 2)) %>%
+  rownames_to_column('mOTU') %>%
+  arrange(desc(MeanDecreaseGini))
+print(head(rf.OTU.importance))
+
+# Let's plot the top predictiors
+nPlot = 20
+# Select top predictors from OTU matrix and format for ggplot
+plotData = as.matrix(OTU_train[,rf.OTU.importance$mOTU[1:nPlot]])
+plotData = melt(plotData)
+plotData = cbind(plotData, Response = gsub(".*_R","R",gsub(".*_NR","NR",plotData$Var1)))
+colnames(plotData) = c("Patient","mOTU","Abundance","Response")
+p_RFpredictors = ggplot(data = plotData,aes(x=Response,y=Abundance,color=Response)) +
+  facet_wrap(facets = "mOTU",ncol = 4, scales = "free") +
+  geom_violin() +
+  geom_jitter() +
+  theme_classic() +
+  theme(plot.title = element_text(face="bold")) +
+  theme(text = element_text(family = "Helvetica")) +
+  theme(axis.text.x=element_blank()) +
+  scale_color_manual(values=c("violetred", "darkturquoise")) +
+  ylab("log-normalised relative abundance") +
+  xlab("")
+p_RFpredictors
+
+```
+
+Let's generate a ROC curve of our model
+```{r}
+rf.train.roc = roc(as.factor(clin_train$Response),rf.OTU$votes[,2])
+plot(rf.train.roc)
+auc(rf.train.roc)
+```
+
+```{r}
+# That's pretty bad, lets try vaying number of trees
+n_tree = c(50, 100, 500, 1000, 2000, 10000, 20000)
+plotData = data.frame(n_tree, AUC = 1:length(n_tree))
+for (i in 1:length(n_tree)) {
+  set.seed(8)
+  print(paste("number of trees: ",n_tree[i]))
+  rf.OTU <- randomForest(x=OTU_train,y=as.factor(clin_train$Response), ntree = n_tree[i] ,importance = TRUE)
+  rf.train.roc = roc(as.factor(clin_train$Response),rf.OTU$votes[,2])
+  plotData$AUC[i] = auc(rf.train.roc)
+}
+
+p_RFperf = ggplot(data = plotData, aes(x = n_tree, y = AUC)) +
+  geom_line() +
+  geom_point() +
+  xlab("no. of trees") +
+  ylab("AUC") +
+  ggtitle("Random forest on OTU matrix") +
+  theme(plot.title = element_text(face="bold")) +
+  theme(text = element_text(family = "Helvetica")) +
+  theme(aspect.ratio=1)
+p_RFperf
+```
+
+## Combined enrichent
+
+In order to enrich for predictive microbes in our Random forest, let's first enrich for microbes in the melanoma data through DESeq2 and then build a random forest model using only these microbes.
+
+Select phylogenetic level and subset melanoma samples:
+```{r}
+physeq_mel = subset_samples(physeq, Cancer_type == "MM")
+```
+
+Run DESeq2
+```{r}
+# Convert phyloseq object to DEseq object
+ds_full = phyloseq_to_deseq2(physeq_mel, ~ Study + Treatment + Response)
+# OTU matrix has many zeros. We need to re-estimate the size factors.
+# Iterative normalisation does not converge, lets use poscounts instead.
+ds_full = estimateSizeFactors(ds_full, type = "poscounts")
+# Run DESeq2
+ds_full = DESeq(ds_full, test = "Wald", fitType = "parametric")
+
+# Extract results
+res_full = results(ds_full, cooksCutoff = FALSE)
+# Set p-value threshold and filter out significant OTUs
+alpha = 0.05
+sigTab_full = res_full[which(res_full$padj < alpha),]
+sigTab_full = cbind(as(sigTab_full, "data.frame"), as(tax_table(physeq_mel)[rownames(sigTab_full), ], "matrix"))
+```
+
+Train RF model using these predictors
+```{r,fig.height = 10, fig.width = 10}
+OTU_filtered = as.matrix(as.data.frame(otu_table(physeq)))
+# Convert to relative abundance
+OTU = apply(OTU, 2, function(x){x/sum(x)})
+# log transform the data
+OTU_filtered = log10(OTU_filtered + 1e-8)
+# Extract microbes from DESeq2 output
+OTU_filtered = OTU_filtered[rownames(sigTab_full),]
+
+# Split into training and test data
+clin_train = clin %>% filter(Study != "Routy_et_al")
+OTU_train = as.data.frame(t(OTU_filtered[,colnames(OTU_filtered) %in% clin_train$Patient_id]))
+clin_test = clin %>% filter(Study == "Routy_et_al")
+OTU_test = as.data.frame(t(OTU_filtered[,colnames(OTU_filtered) %in% clin_test$Patient_id]))
+
+#Concatenate Treatment, Study and Cancer_type information into data frame
+OTU_train = cbind(OTU_train,
+                  Treatment = clin_train$Treatment,
+                  Study = clin_train$Study,
+                  Cancer_type = clin_train$Cancer_type)
+OTU_test = cbind(OTU_test,
+                  Treatment = clin_test$Treatment,
+                  Study = clin_test$Study,
+                  Cancer_type = clin_test$Cancer_type)
+
+set.seed(8)
+# Construct random forest model for training data
+rf.OTU <- randomForest(x=OTU_train,y=clin_train$Response, ntree = 10000 ,importance = TRUE)
+# View confusion matrix
+print(rf.OTU$confusion)
+# View the most important (Mean decrease of GINI impurity) features for prediction
+rf.OTU.importance <- data.frame(importance(rf.OTU, type = 2)) %>%
+  rownames_to_column('mOTU') %>%
+  arrange(desc(MeanDecreaseGini))
+print(head(rf.OTU.importance))
+
+# Let's plot the top predictiors
+
+# Select top predictors from OTU matrix and format for ggplot
+plotData = OTU_filtered
+plotData = melt(plotData)
+plotData = cbind(plotData, Response = gsub(".*_R","R",gsub(".*_NR","NR",plotData$Var2)))
+colnames(plotData) = c("mOTU","Patient","Abundance","Response")
+p_RFpredictors = ggplot(data = plotData,aes(x=Response,y=Abundance,color=Response)) +
+  facet_wrap(facets = "mOTU",ncol = 4, scales = "free") +
+  geom_violin() +
+  geom_jitter() +
+  theme_classic() +
+  theme(plot.title = element_text(face="bold")) +
+  theme(text = element_text(family = "Helvetica")) +
+  theme(axis.text.x=element_blank()) +
+  scale_color_manual(values=c("violetred", "darkturquoise")) +
+  ylab("log-normalised relative abundance") +
+  xlab("")
+p_RFpredictors
+
+```
+
+Let's generate a ROC curve of our model
+```{r}
+rf.train.roc = roc(as.factor(clin_train$Response),rf.OTU$votes[,2])
+plot(rf.train.roc)
+auc(rf.train.roc)
+```
+
+
