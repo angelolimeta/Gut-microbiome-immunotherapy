@@ -2,13 +2,20 @@
 title: "Microbiome composition analysis in cancer immunotherapy patients"
 output:
   html_document:
-    df_print: paged
+    df_print: kable
     toc: true
     toc_float: true
 ---
 
+## Set working directory
+```{r setup, include=FALSE, echo=FALSE}
+require("knitr")
+opts_knit$set(root.dir = "/Users/angelol/Documents/PhD/Gut-microbiome-immunotherapy/")
+```
+
+
 ## Load packages
-```{r}
+```{r, echo=FALSE}
 library(ggplot2)
 library(Rtsne)
 library(phyloseq)
@@ -49,20 +56,20 @@ library(pROC)
 
 ```{r}
 # Phyloseq object (Both abundance and taxonomic info)
-physeq = readRDS("/Users/angelol/Documents/PhD/Gut-microbiome-immunotherapy/data/Abundance_tables/physeq.rds")
+physeq = readRDS("./data/Abundance_tables/physeq.rds")
 
 # Abundance table for each OTU
-OTU = readRDS("/Users/angelol/Documents/PhD/Gut-microbiome-immunotherapy/data/Abundance_tables/OTU.rds")
+OTU = readRDS("./data/Abundance_tables/OTU.rds")
 # Clinical metadata
-clin = readRDS("/Users/angelol/Documents/PhD/Gut-microbiome-immunotherapy/Metadata/Processed_metadata/clin.rds")
+clin = readRDS("./Metadata/Processed_metadata/clin.rds")
 # Pyholgenetic metadata
-phylo_meta = readRDS("/Users/angelol/Documents/PhD/Gut-microbiome-immunotherapy/Metadata/Processed_metadata/phylo_meta.rds")
+phylo_meta = readRDS("./Metadata/Processed_metadata/phylo_meta.rds")
 ```
 
 ## Pre-process data
 
 Let's filter out microbes that are not identified across at least 5 samples and convert to relative abundance
-```{r}
+```{r, echo=FALSE}
 physeq_f = filter_taxa(physeq, function(x) sum(x > 0) > 5, TRUE)
 physeq_f = transform_sample_counts(physeq_f, function(x) x/sum(x))
 
@@ -116,49 +123,53 @@ studies = c("Gopalakrishnan","Matson","Frankel","Routy")
 # Initialize empty plot list
 p_list = list()
 for (i in 1:length(studies)) {
-  local({ #Sets local enviroment in order to not overwrite plot data
+  local({
+    #Sets local enviroment in order to not overwrite plot data
     
     # Extract three letter study ID
     study_id = substr(studies[i], start = 1, stop = 3)
     # Subset OTU_filtered matrix
-    physeq_f_study = prune_samples(samples = grepl(study_id,sample_names(physeq_f)), physeq_f)
+    physeq_f_study = prune_samples(samples = grepl(study_id, sample_names(physeq_f)), physeq_f)
     # Calculate weighted UniFrac distances between all filtered samples
-    distance.matrix = UniFrac(physeq_f_study,weighted = TRUE)
+    distance.matrix = UniFrac(physeq_f_study, weighted = TRUE)
     # Perform PCoA
     PCoA = cmdscale(distance.matrix, eig = TRUE, x.ret = TRUE)
     # Extract variance information for each PCoA axis
-    PCoA.variance = round(PCoA$eig/sum(PCoA$eig)*100, 1)
+    PCoA.variance = round(PCoA$eig / sum(PCoA$eig) * 100, 1)
     # Extract values for each component
     PCoA.values = PCoA$points
     # Format data for ggplot
-    PCoA.data = data.frame(Sample = rownames(PCoA.values),
-                           X = PCoA.values[,1],
-                           Y = PCoA.values[,2],
-                           Response = gsub(".*_R","R",gsub(".*_NR","NR",rownames(PCoA.values))))
+    PCoA.data = data.frame(
+      Sample = rownames(PCoA.values),
+      X = PCoA.values[, 1],
+      Y = PCoA.values[, 2],
+      Response = gsub(".*_R", "R", gsub(".*_NR", "NR", rownames(PCoA.values)))
+    )
     # Call ggplot
     p_MDS_study = ggplot(data = PCoA.data, aes(x = X, y = Y)) +
-      geom_point(size = 2, aes(color = Response), show.legend = FALSE) +
-      stat_ellipse(aes(X,Y,color=Response, group=Response), show.legend = FALSE) +
-      xlab(paste("MDS1: ", PCoA.variance[1],"%", sep = "")) +
-      ylab(paste("MDS2: ", PCoA.variance[2],"%", sep = "")) +
-      ggtitle(paste(studies[i]," et al.", sep = "")) +
+      geom_point(size = 2,
+                 aes(color = Response),
+                 show.legend = FALSE) +
+      stat_ellipse(aes(X, Y, color = Response, group = Response), show.legend = FALSE) +
+      xlab(paste("MDS1: ", PCoA.variance[1], "%", sep = "")) +
+      ylab(paste("MDS2: ", PCoA.variance[2], "%", sep = "")) +
+      ggtitle(paste(studies[i], " et al.", sep = "")) +
       theme_classic() +
-      theme(plot.title = element_text(face="bold")) +
+      theme(plot.title = element_text(face = "bold")) +
       theme(text = element_text(family = "Helvetica")) +
-      theme(axis.text.x=element_blank(),
-            axis.text.y=element_blank()) +
-      theme(aspect.ratio=1) +
-      scale_color_manual(values=c("violetred", "darkturquoise"))
+      theme(axis.text.x = element_blank(),
+            axis.text.y = element_blank()) +
+      theme(aspect.ratio = 1) +
+      scale_color_manual(values = c("violetred", "darkturquoise"))
     # Save to plot list
     p_list[[i]] <<- p_MDS_study
   })
 }
 
-grid.arrange(
-  grobs = p_list,
-  layout_matrix = rbind(c(1, 2),
-                        c(3, 4))
-)
+p_all_study = grid.arrange(grobs = p_list,
+                           layout_matrix = rbind(c(1, 2),
+                                                 c(3, 4)))
+
 ```
 
 Let's also try manifold learning using t-SNE with weighted UniFrac.
@@ -239,11 +250,15 @@ grid.arrange(
 ## Alpha diversity
 
 ```{r}
-plot_anova_diversity(physeq, method = c("shannon", "richness","simpson","fisher"), grouping_column = "Response", pValueCutoff = 0.05)
+p_diversity = plot_anova_diversity(physeq, method = c("shannon", "richness","simpson","fisher"), grouping_column = "Response", pValueCutoff = 0.05)
 
-plot_anova_diversity(physeq, method = c("shannon", "richness","simpson","fisher"), grouping_column = "Study", pValueCutoff = 0.05)
+p_diversity_study = plot_anova_diversity(physeq, method = c("shannon", "richness","simpson","fisher"), grouping_column = "Study", pValueCutoff = 0.05)
 
+p_diversity
+p_diversity_study
 
+ggsave(p_diversity,filename = "./Figures/Diversity2.svg")
+ggsave(p_diversity_study, filename = "./Figures/Diversity_study.svg")
 ```
 
 Let's also check differences for each study
@@ -300,7 +315,7 @@ p_all = grid.arrange(grobs = p_list,
 
 ## Distributions of taxa
 
-Let's barplots in order to visualise differences in taxonomic distributions across responders vs non-responders.
+Let's produce barplots in order to visualise differences in taxonomic distributions across responders vs non-responders.
 
 ```{r, fig.height=10, fig.width=20}
 
@@ -331,6 +346,7 @@ for (i in 1:length(taxlevel)) {
     text = element_text(family = "Helvetica"))
   
   print(p_bar)
+  ggsave(p_bar,filename = paste0("./Figures/TaxDist_",taxlevel[i],".svg"))
 }
 ```
 
@@ -374,7 +390,9 @@ for (i in 1:length(taxlevel)) {
 
 ```{r}
 # Select taxonomic level
-physeq_level = taxa_level(physeq, which_level = "Genus")
+physeq_f_level = taxa_level(physeq, which_level = "Genus")
+
+physeq_f_level = subset_samples(physeq_f_level, Study != "Routy_et_al")
 
 
 # Enriched in responders
@@ -429,14 +447,16 @@ for (i in 1:nrow(OTU_filtered)) {
   diffOTUs$fold_change[i] = log2((median(R_abundance) + 0.001)/(median(NR_abundance) + 0.001))
 }
 
-## Adjust for multiple testing
-#diffOTUs$pvalue = p.adjust(diffOTUs$pvalue,method = "fdr")
 # Order according to most significant
 diffOTUs = diffOTUs[order(diffOTUs$pvalue),]
+# Save unadjusted pvalues
+diffOTUs_unadj = diffOTUs
+# Adjust for multiple testing
+diffOTUs$pvalue = p.adjust(diffOTUs$pvalue,method = "fdr")
 # Keep only significant microbes (P < 0.05)
-diffOTUs = diffOTUs[diffOTUs$pvalue < 0.05,]
+diffOTUs = diffOTUs[diffOTUs$pvalue < 0.2,]
 # Remove NAs
-diffOTUs = diffOTUs[!is.na(diffOTUs$pvalue),]
+diffOTUs[is.na(diffOTUs$pvalue),] = 1
 
 
 
