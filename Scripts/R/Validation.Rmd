@@ -15,7 +15,7 @@ opts_knit$set(root.dir = "/Users/angelol/Documents/PhD/Gut-microbiome-immunother
 
 
 ## Load packages
-```{r, echo=FALSE}
+```{r, echo=FALSE, warning=FALSE}
 library(ggplot2)
 library(Rtsne)
 library(phyloseq)
@@ -27,7 +27,7 @@ library(RColorBrewer)
 library(dplyr)
 library(DESeq2)
 library(reshape2)
-library(tibble)
+library(tidyverse)
 
 #library(devtools)
 #install_github("opisthokonta/tsnemicrobiota")
@@ -45,6 +45,24 @@ library(visNetwork)
 library(ComplexHeatmap)
 library(circlize)
 
+library(umap)
+library(pROC)
+library(xml2)
+library(bio3d)
+library(RCurl)
+library(gridExtra)
+library(grid)
+library(ggpubr)
+library(lemon)
+
+library(survival)
+library(ranger)
+library(ggfortify)
+library(survminer)
+library(randomForest)
+library(hrbrthemes)
+library(wesanderson)
+library(patchwork)
 ```
 
 
@@ -55,42 +73,62 @@ library(circlize)
 
 # Phyloseq object (Both abundance and taxonomic info)
 physeq = readRDS("./data/Abundance_tables/physeq.rds")
-# Abundance table for each OTU
-OTU = readRDS("./data/Abundance_tables/OTU.rds")
 # Clinical metadata
 clin = readRDS("./Metadata/Processed_metadata/clin.rds")
+clin = clin[clin$Patient_id != "p040_Mat_R",]
+# Pyholgenetic metadata
+phylo_meta = readRDS("./Metadata/Processed_metadata/phylo_meta.rds")
+# Pathway abundance data
+pathAbundance = readRDS(file = "/Users/angelol/Documents/PhD/Gut-microbiome-immunotherapy/data/humann2/pathAbundance_merged_filtered_UniRef50_lowTHR.rds")
+# Gene abundance data
+geneAbundance = readRDS(file = "/Users/angelol/Documents/PhD/Gut-microbiome-immunotherapy/data/humann2/geneAbundance_merged_filtered_UniRef50.rds")
+
 
 # VALIDATION
 # Phyloseq object (Both abundance and taxonomic info)
-physeq = readRDS("./data/Abundance_tables/val_physeq.rds")
+val_physeq = readRDS("./data/Abundance_tables/val_physeq.rds")
 # Abundance table for each OTU
-val_OTU = readRDS("./data/Abundance_tables/OTU.rds")
+val_OTU = readRDS("./data/Abundance_tables/val_OTU.rds")
 # Clinical metadata
-val_clin = readRDS("./Metadata/Processed_metadata/clin.rds")
+val_clin = readRDS("./Metadata/Processed_metadata/val_clin.rds")
+# Pathway abundance data
+val_pathAbundance = readRDS(file = "/Users/angelol/Documents/PhD/Gut-microbiome-immunotherapy/data/humann2/val_pathAbundance_merged_filtered_UniRef50_lowTHR.rds")
+val_geneAbundance = readRDS(file = "/Users/angelol/Documents/PhD/Gut-microbiome-immunotherapy/data/humann2/val_geneAbundance_merged_filtered_UniRef50_lowTHR.rds")
 ```
 
 ## Pre-process data
 
 Let's filter out microbes that are not identified across at least 5 samples and convert to relative abundance
-```{r, echo=FALSE}
+```{r, echo=FALSE, warning=FALSE}
 physeq_f = filter_taxa(physeq, function(x) sum(x > 0) > 5, TRUE)
 physeq_f = transform_sample_counts(physeq_f, function(x) x/sum(x))
 
-
-OTU = apply(OTU, 2, function(x){x/sum(x)})
-# Filter out microbes that are not identified across at least 5 samples
-OTU_filtered = OTU[apply(OTU, 1, function(x) sum(x > 0)) > 5,]
-# Sort according to most abundant OTUs
-OTU_filtered = OTU_filtered[order(rowSums(OTU_filtered),decreasing = TRUE),]
+#val_physeq_f = filter_taxa(val_physeq, function(x) sum(x > 0) > 5, TRUE)
+val_physeq_f = transform_sample_counts(val_physeq, function(x) x/sum(x))
 ```
 
-##Explore data
+Let's also log-normalise our data. We add one pseudo-CoPM to each gene/pathway in the gene/pathway abundance matrices in order to avoid taking the log of zero.
+```{r}
+geneAbundance = log2(geneAbundance + 1)
+pathAbundance = log2(pathAbundance + 1)
+val_pathAbundance = log2(val_pathAbundance + 1)
+val_geneAbundance = log2(val_geneAbundance + 1)
+```
 
+For the gene abundance data, let's extract melanoma data and filter out the most variable genes
+```{r}
+geneAbundance_mel = geneAbundance[,!grepl("Rou",colnames(geneAbundance))]
+GeneVariance = apply(geneAbundance_mel, 1, var)
+GeneVariance = sort(GeneVariance, decreasing = TRUE)
+GeneVariance = GeneVariance[1:500]
+geneAbundance_mel = geneAbundance_mel[names(GeneVariance),]
+```
+##Explore data
 Let's first visualize differences in microbial composition across patients using PCoA.
 We will use weighted UNIFRAC as our distance matrix.
 ```{r}
 # Calculate weighted UniFrac distances between all filtered samples
-distance.matrix = UniFrac(physeq_f,weighted = TRUE)
+distance.matrix = UniFrac(val_physeq_f,weighted = TRUE)
 # Perform PCoA
 PCoA = cmdscale(distance.matrix, eig = TRUE, x.ret = TRUE)
 # Extract variance information for each PCoA axis
@@ -118,57 +156,595 @@ p_MDS = ggplot(data = PCoA.data, aes(x = X, y = Y)) +
   theme(aspect.ratio=1) +
   scale_color_manual(values=c("violetred", "darkturquoise"))
 p_MDS
+```
 
-# Perform the analysis for all studies separately
-studies = c("Gopalakrishnan","Matson","Frankel","Routy")
-# Initialize empty plot list
-p_list = list()
-for (i in 1:length(studies)) {
-  local({
-    #Sets local enviroment in order to not overwrite plot data
-    
-    # Extract three letter study ID
-    study_id = substr(studies[i], start = 1, stop = 3)
-    # Subset OTU_filtered matrix
-    physeq_f_study = prune_samples(samples = grepl(study_id, sample_names(physeq_f)), physeq_f)
-    # Calculate weighted UniFrac distances between all filtered samples
-    distance.matrix = UniFrac(physeq_f_study, weighted = TRUE)
-    # Perform PCoA
-    PCoA = cmdscale(distance.matrix, eig = TRUE, x.ret = TRUE)
-    # Extract variance information for each PCoA axis
-    PCoA.variance = round(PCoA$eig / sum(PCoA$eig) * 100, 1)
-    # Extract values for each component
-    PCoA.values = PCoA$points
-    # Format data for ggplot
-    PCoA.data = data.frame(
-      Sample = rownames(PCoA.values),
-      X = PCoA.values[, 1],
-      Y = PCoA.values[, 2],
-      Response = gsub(".*_R", "R", gsub(".*_NR", "NR", rownames(PCoA.values)))
-    )
-    # Call ggplot
-    p_MDS_study = ggplot(data = PCoA.data, aes(x = X, y = Y)) +
-      geom_point(size = 2,
-                 aes(color = Response),
-                 show.legend = FALSE) +
-      stat_ellipse(aes(X, Y, color = Response, group = Response), show.legend = FALSE) +
-      xlab(paste("MDS1: ", PCoA.variance[1], "%", sep = "")) +
-      ylab(paste("MDS2: ", PCoA.variance[2], "%", sep = "")) +
-      ggtitle(paste(studies[i], " et al.", sep = "")) +
-      theme_classic() +
-      theme(plot.title = element_text(face = "bold")) +
-      theme(text = element_text(family = "Helvetica")) +
-      theme(axis.text.x = element_blank(),
-            axis.text.y = element_blank()) +
-      theme(aspect.ratio = 1) +
-      scale_color_manual(values = c("violetred", "darkturquoise"))
-    # Save to plot list
-    p_list[[i]] <<- p_MDS_study
-  })
+```{r}
+#Perform tSNE on filtered samples
+set.seed(9)
+tsne_res = tsne_phyloseq(val_physeq_f, distance='wunifrac',
+                     perplexity = 20, verbose=0, rng_seed = 9)
+
+tsne.data = data.frame(Sample = sample_names(val_physeq_f),
+                       X = tsne_res$tsne$par[,1],
+                       Y = tsne_res$tsne$par[,2],
+                       Response = gsub(".*_R","R",gsub(".*_NR","NR",sample_names(val_physeq_f))))
+# Call ggplot
+p_tsne <- ggplot(tsne.data, aes(x=X, y=Y)) +
+  geom_point(size = 2, aes(color = Response)) +
+  stat_ellipse(aes(color = Response, group = Response),size = 1, linetype = 1) +
+  xlab("t-SNE 1") +
+  ylab("t-SNE 2") +
+  ggtitle("Validation data") +
+  theme_classic() +
+  theme(plot.title = element_text(face="bold")) +
+  theme(text = element_text(family = "Helvetica")) +
+  theme(axis.text.x=element_blank(),
+        axis.text.y=element_blank()) +
+  theme(aspect.ratio=1) +
+  scale_color_manual(values=c("violetred", "darkturquoise"))
+p_tsne
+
+```
+
+Select taxonomic level:
+```{r}
+physeq_f_level = taxa_level(physeq_f, which_level = "Species")
+
+# Use only melanoma data
+physeq_f_level = subset_samples(physeq_f_level, Study != "Routy_et_al")
+
+OTU_filtered = as.matrix(t(as.data.frame(otu_table(physeq_f_level))))
+```
+
+
+```{r,fig.height = 10, fig.width = 15}
+# Initialise empty data frame for storing differentially abundant OTUs
+diffOTUs = data.frame(pvalue = 1:nrow(OTU_filtered), fold_change = 1:nrow(OTU_filtered), taxonomy = phylo_meta[rownames(OTU_filtered),1])
+rownames(diffOTUs) = rownames(OTU_filtered)
+
+# Loop over all OTUs
+for (i in 1:nrow(OTU_filtered)) {
+  # Extract abundances of each OTU for both R and NR
+  R_abundance = as.numeric(OTU_filtered[i,grepl("_R",colnames(OTU_filtered))])
+  NR_abundance = as.numeric(OTU_filtered[i,grepl("_NR",colnames(OTU_filtered))])
+  
+  diffOTUs$pvalue[i] = wilcox.test(R_abundance,NR_abundance, alternative = "two.sided")$p.value
+  diffOTUs$fold_change[i] = log2((median(R_abundance) + 0.001)/(median(NR_abundance) + 0.001))
 }
 
-p_all_study = grid.arrange(grobs = p_list,
-                           layout_matrix = rbind(c(1, 2),
-                                                 c(3, 4)))
+## Adjust for multiple testing
+#diffOTUs$pvalue = p.adjust(diffOTUs$pvalue,method = "fdr")
+# Order according to most significant
+diffOTUs = diffOTUs[order(diffOTUs$pvalue),]
+# Keep only significant microbes (P < 0.05)
+diffOTUs = diffOTUs[diffOTUs$pvalue < 0.05,]
+# Remove NAs
+diffOTUs = diffOTUs[!is.na(diffOTUs$pvalue),]
 
+
+
+# Lets make a heatmap of the top differentially abundant microbes
+hm.data = log10(OTU_filtered[rownames(diffOTUs),]+1e-10)
+
+rownames(hm.data) = gsub(" \\[.*","", rownames(hm.data))
+# Create annotations for heatmap
+ha = HeatmapAnnotation(Response = as.factor(gsub(".*_R","R",gsub(".*_NR","NR",colnames(OTU_filtered)))),
+                       Study = as.factor(substr(colnames(OTU_filtered), start = 6, stop = 8)),
+                       col = list(Response = c(NR ="violetred", R = "darkturquoise"),
+                                  Study = c(Gop = "burlywood1",Fra = "indianred1", Mat = "firebrick4", Rou = "chocolate")))
+# Define color palette
+col_fun = colorRamp2(c(-10,-5,-2), c("slateblue4","maroon3","lightyellow"))
+
+# Draw heatmap
+hm = Heatmap(hm.data,
+        name = "log10 rel. ab.",
+        row_names_side = "left",
+        clustering_distance_rows = "euclidean",
+        clustering_distance_columns = "euclidean",
+        show_column_names = FALSE,
+        width = unit(10, "cm"),
+        height = unit(10, "cm"),
+        top_annotation = ha,
+        col = col_fun,
+        column_dend_height = unit(25, "mm"))
+
+# Add boxplots to each row
+rg = range(hm.data)
+pat_groups = as.logical(as.integer(as.factor(gsub(".*_R","R",gsub(".*_NR","NR",colnames(OTU_filtered))))) - 1L)
+anno_multiple_boxplot = function(index) {
+    pushViewport(viewport(xscale = rg, yscale = c(0.5, nrow(hm.data) + 0.5)))
+    for(i in seq_along(index)) {
+        grid.rect(y = nrow(hm.data)-i+1, height = 1, default.units = "native")
+        grid.boxplot(hm.data[index[i], pat_groups], pos = nrow(hm.data)-i+1 + 0.2, box_width = 0.3, 
+            gp = gpar(fill = "darkturquoise"), direction = "horizontal")
+        grid.boxplot(hm.data[ index[i], !pat_groups], pos = nrow(hm.data)-i+1 - 0.2, box_width = 0.3, 
+            gp = gpar(fill = "violetred"), direction = "horizontal")
+    }
+    grid.xaxis()
+    popViewport()
+}
+
+hm = hm + rowAnnotation(boxplot = anno_multiple_boxplot, width =unit(4, "cm"), show_annotation_name = FALSE)
+
+draw(hm)
+```
+
+###Test out microbes in validation data
+```{r,fig.height = 10, fig.width = 15}
+val_physeq_f_level = taxa_level(val_physeq_f, which_level = "Species")
+
+OTU_filtered = as.matrix(t(as.data.frame(otu_table(val_physeq_f_level))))
+# Lets make a heatmap of the top differentially abundant microbes
+hm.data = log10(OTU_filtered[rownames(diffOTUs),]+1e-10)
+
+rownames(hm.data) = gsub(" \\[.*","", rownames(hm.data))
+# Create annotations for heatmap
+ha = HeatmapAnnotation(Response = as.factor(gsub(".*_R","R",gsub(".*_NR","NR",colnames(OTU_filtered)))),
+                       col = list(Response = c(NR ="violetred", R = "darkturquoise")))
+# Define color palette
+col_fun = colorRamp2(c(-10,-5,-2), c("slateblue4","maroon3","lightyellow"))
+
+# Draw heatmap
+hm = Heatmap(hm.data,
+        name = "log10 rel. ab.",
+        row_names_side = "left",
+        clustering_distance_rows = "euclidean",
+        clustering_distance_columns = "euclidean",
+        show_column_names = FALSE,
+        width = unit(10, "cm"),
+        height = unit(10, "cm"),
+        top_annotation = ha,
+        col = col_fun,
+        column_dend_height = unit(25, "mm"))
+
+# Add boxplots to each row
+rg = range(hm.data)
+pat_groups = as.logical(as.integer(as.factor(gsub(".*_R","R",gsub(".*_NR","NR",colnames(OTU_filtered))))) - 1L)
+anno_multiple_boxplot = function(index) {
+    pushViewport(viewport(xscale = rg, yscale = c(0.5, nrow(hm.data) + 0.5)))
+    for(i in seq_along(index)) {
+        grid.rect(y = nrow(hm.data)-i+1, height = 1, default.units = "native")
+        grid.boxplot(hm.data[index[i], pat_groups], pos = nrow(hm.data)-i+1 + 0.2, box_width = 0.3, 
+            gp = gpar(fill = "darkturquoise"), direction = "horizontal")
+        grid.boxplot(hm.data[ index[i], !pat_groups], pos = nrow(hm.data)-i+1 - 0.2, box_width = 0.3, 
+            gp = gpar(fill = "violetred"), direction = "horizontal")
+    }
+    grid.xaxis()
+    popViewport()
+}
+
+hm = hm + rowAnnotation(boxplot = anno_multiple_boxplot, width =unit(4, "cm"), show_annotation_name = FALSE)
+
+draw(hm)
+```
+
+###Differential abundance tests of Genes
+
+Extract differentially abundant genes in training data
+```{r}
+# Initialise empty data frame for storing differentially abundant genes
+DEgenes_mel = data.frame(pvalue = 1:nrow(geneAbundance_mel), fold_change = 1:nrow(geneAbundance_mel))
+rownames(DEgenes_mel) = rownames(geneAbundance_mel)
+
+# Loop over all genes
+for (i in 1:nrow(geneAbundance_mel)) {
+  # Extract abundances of each gene for both R and NR
+  R_abundance = as.numeric(geneAbundance_mel[i,grepl("_R",colnames(geneAbundance_mel))])
+  NR_abundance = as.numeric(geneAbundance_mel[i,grepl("_NR",colnames(geneAbundance_mel))])
+  
+  DEgenes_mel$pvalue[i] = wilcox.test(R_abundance,NR_abundance, alternative = "two.sided")$p.value
+  DEgenes_mel$fold_change[i] = median(R_abundance) - median(NR_abundance)
+}
+
+## Adjust for multiple testing
+#DEgenes_mel$pvalue = p.adjust(DEgenes_mel$pvalue,method = "fdr")
+# Order according to most significant genes
+DEgenes_mel = DEgenes_mel[order(DEgenes_mel$pvalue),]
+# Keep only significant genes (P < 0.05)
+DEgenes_mel = DEgenes_mel[DEgenes_mel$pvalue < 0.05,]
+
+print(DEgenes_mel)
+```
+Visualise top genes in training data
+```{r, fig.width=20, fig.height=10}
+hm.data = as.matrix(geneAbundance_mel[rownames(DEgenes_mel),])
+# Remove pathways not detected in validation data
+hm.data = hm.data[!is.na(hm.data[,1]),]
+
+# Create annotations for heatmap
+ha = HeatmapAnnotation(Response = as.factor(gsub(".*_R","R",gsub(".*_NR","NR",colnames(geneAbundance_mel)))),
+                       Study = as.factor(substr(colnames(geneAbundance_mel), start = 6, stop = 8)),
+                       col = list(Response = c(NR ="violetred", R = "darkturquoise"),
+                                  Study = c(Gop = "burlywood1",Fra = "indianred1", Mat = "firebrick4", Rou = "chocolate")))
+# Define color palette
+col_fun = colorRamp2(c(0,6,12), c("slateblue4","maroon3","lightyellow"))
+
+# Draw heatmap
+hm = Heatmap(hm.data,
+        name = "log2(CoPM)",
+        row_names_side = "left",
+        clustering_distance_rows = "euclidean",
+        clustering_distance_columns = "euclidean",
+        show_column_names = FALSE,
+        width = unit(12, "cm"),
+        height = unit(20, "cm"),
+        top_annotation = ha,
+        col = col_fun,
+        column_dend_height = unit(25, "mm"),
+        show_row_dend = FALSE)
+# Add boxplots to each row
+rg = range(hm.data)
+pat_groups = as.logical(as.integer(as.factor(gsub(".*_R","R",gsub(".*_NR","NR",colnames(val_pathAbundance))))) - 1L)
+anno_multiple_boxplot = function(index) {
+    pushViewport(viewport(xscale = rg, yscale = c(0.5, nrow(hm.data) + 0.5)))
+    for(i in seq_along(index)) {
+        grid.rect(y = nrow(hm.data)-i+1, height = 1, default.units = "native")
+        grid.boxplot(hm.data[index[i], pat_groups], pos = nrow(hm.data)-i+1 + 0.2, box_width = 0.3, 
+            gp = gpar(fill = "darkturquoise"), direction = "horizontal")
+        grid.boxplot(hm.data[ index[i], !pat_groups], pos = nrow(hm.data)-i+1 - 0.2, box_width = 0.3, 
+            gp = gpar(fill = "violetred"), direction = "horizontal")
+    }
+    grid.xaxis()
+    popViewport()
+}
+    
+hm = hm + rowAnnotation(boxplot = anno_multiple_boxplot, width =unit(4, "cm"), show_annotation_name = FALSE)
+print(hm)
+```
+
+
+
+###Differential abundance tests of pathways
+```{r}
+# Run PCA for the pathway abundance data
+pca.path = prcomp(t(val_pathAbundance), scale = FALSE, center = TRUE)
+# Format output for ggplot
+plotData = pca.path$x[,c(1,2)]
+plotData = data.frame(PC1 = as.numeric(plotData[,1]),
+                      PC2 = as.numeric(plotData[,2]),
+                      Response = gsub(".*_R","R",gsub(".*_NR","NR",rownames(plotData))),
+                      Study = substr(rownames(plotData),6,8))
+rownames(plotData) = NULL
+# Call ggplot
+p_path_pca = ggplot(data = as.data.frame(plotData), aes(x = PC1, y = PC2)) +
+  labs(title = "PCA of validation data based on pathway abundance", subtitle = "log2 (CoPM + 1)") +
+  geom_point(size = 2,aes(color = Response)) +
+  stat_ellipse(aes(color = Response, group = Response),size = 1, linetype = 1) +
+  xlab(paste("PC1: ", round(((pca.path$sdev[1])^2)/sum((pca.path$sdev)^2)*100,1),"% variance",sep = "")) +
+  ylab(paste("PC2: ", round(((pca.path$sdev[2])^2)/sum((pca.path$sdev)^2)*100,1),"% variance",sep = "")) +
+  theme_classic() +
+  theme(plot.title = element_text(face="bold")) +
+  theme(text = element_text(family = "Helvetica")) +
+  theme(axis.text.x=element_blank(),
+        axis.text.y=element_blank()) +
+  theme(aspect.ratio=1) +
+  scale_color_manual(values=c("violetred", "turquoise3"))
+
+p_path_pca
+```
+
+Select only the melanoma data
+```{r}
+pathAbundance_mel = pathAbundance[,!grepl("Rou",colnames(pathAbundance))]
+```
+
+Extract differentially abundant pathways in training data
+```{r}
+# Initialise empty data frame for storing differentially abundant pathways
+DEpaths_mel = data.frame(pvalue = 1:nrow(pathAbundance_mel), fold_change = 1:nrow(pathAbundance_mel))
+rownames(DEpaths_mel) = rownames(pathAbundance_mel)
+
+# Loop over all pathways
+for (i in 1:nrow(pathAbundance_mel)) {
+  # Extract abundances of each path for both R and NR
+  R_abundance = as.numeric(pathAbundance_mel[i,grepl("_R",colnames(pathAbundance_mel))])
+  NR_abundance = as.numeric(pathAbundance_mel[i,grepl("_NR",colnames(pathAbundance_mel))])
+  
+  DEpaths_mel$pvalue[i] = wilcox.test(R_abundance,NR_abundance, alternative = "two.sided")$p.value
+  DEpaths_mel$fold_change[i] = median(R_abundance) - median(NR_abundance)
+}
+
+## Adjust for multiple testing
+#DEpaths_mel$pvalue = p.adjust(DEpaths_mel$pvalue,method = "fdr")
+# Order according to most significant paths
+DEpaths_mel = DEpaths_mel[order(DEpaths_mel$pvalue),]
+# Keep only significant paths (P < 0.05)
+DEpaths_mel = DEpaths_mel[DEpaths_mel$pvalue < 0.05,]
+
+print(DEpaths_mel)
+```
+
+Visualise top pathways in test data
+```{r, fig.width=20, fig.height=10}
+hm.data = as.matrix(val_pathAbundance[rownames(DEpaths_mel),])
+# Remove pathways not detected in validation data
+hm.data = hm.data[!is.na(hm.data[,1]),]
+
+# Create annotations for heatmap
+ha = HeatmapAnnotation(Response = as.factor(gsub(".*_R","R",gsub(".*_NR","NR",colnames(val_pathAbundance)))),
+                       col = list(Response = c(NR ="violetred", R = "darkturquoise")))
+# Define color palette
+col_fun = colorRamp2(c(0,4,8), c("slateblue4","maroon3","lightyellow"))
+
+# Draw heatmap
+hm = Heatmap(hm.data,
+        name = "log2(CoPM)",
+        row_names_side = "left",
+        clustering_distance_rows = "euclidean",
+        clustering_distance_columns = "euclidean",
+        show_column_names = FALSE,
+        width = unit(12, "cm"),
+        height = unit(20, "cm"),
+        top_annotation = ha,
+        col = col_fun,
+        column_dend_height = unit(25, "mm"),
+        show_row_dend = FALSE)
+# Add boxplots to each row
+rg = range(hm.data)
+pat_groups = as.logical(as.integer(as.factor(gsub(".*_R","R",gsub(".*_NR","NR",colnames(val_pathAbundance))))) - 1L)
+anno_multiple_boxplot = function(index) {
+    pushViewport(viewport(xscale = rg, yscale = c(0.5, nrow(hm.data) + 0.5)))
+    for(i in seq_along(index)) {
+        grid.rect(y = nrow(hm.data)-i+1, height = 1, default.units = "native")
+        grid.boxplot(hm.data[index[i], pat_groups], pos = nrow(hm.data)-i+1 + 0.2, box_width = 0.3, 
+            gp = gpar(fill = "darkturquoise"), direction = "horizontal")
+        grid.boxplot(hm.data[ index[i], !pat_groups], pos = nrow(hm.data)-i+1 - 0.2, box_width = 0.3, 
+            gp = gpar(fill = "violetred"), direction = "horizontal")
+    }
+    grid.xaxis()
+    popViewport()
+}
+    
+hm = hm + rowAnnotation(boxplot = anno_multiple_boxplot, width =unit(4, "cm"), show_annotation_name = FALSE)
+print(hm)
+```
+
+### Random Forests
+
+Concatinate differentially abundant pathways and microbes into one data frame
+```{r}
+physeq_f_level = taxa_level(physeq_f, which_level = "Species")
+# Use only melanoma data
+physeq_f_level = subset_samples(physeq_f_level, Study != "Routy_et_al")
+OTU_train = as.matrix(t(as.data.frame(otu_table(physeq_f_level))))[rownames(diffOTUs),]
+OTU_train = OTU_train[,colnames(OTU_train)!="p040_Mat_R"]
+
+#gene_train = geneAbundance_mel[rownames(DEgenes_mel),]
+
+# Remove missing pathway
+DEpaths_mel = DEpaths_mel[rownames(DEpaths_mel) != "P3-PWY: gallate degradation III (anaerobic)",]
+path_train = pathAbundance_mel[rownames(DEpaths_mel),]
+
+
+train = t(rbind(OTU_train,
+                #gene_train,
+                path_train))
+
+train_label = clin[clin$Study != "Routy_et_al",]$Response
+```
+
+Data is now ready for random forest classification. 
+```{r, fig.width=10, fig.height=5}
+# Genes
+# Set number of trees in RF
+n_tree = 100000
+# Set seed for reproducibility
+set.seed(9)
+rf <- randomForest(x=train,y=train_label, ntree = n_tree ,importance = TRUE)
+
+
+cat("Confusion matrix: \n\n")
+rf$confusion
+cat("\n")
+cat("Top predictors: \n")
+
+
+plotData = as.data.frame(rf$importance[order(rf$importance[,4], decreasing = TRUE),4,drop = F])
+plotData = cbind(rownames(plotData),plotData)
+rownames(plotData) = NULL
+colnames(plotData)[1] = "Feature"
+plotData$Feature = as.character(plotData$Feature)
+plotData
+
+# Label features according to pathway or OTU
+plotData %>%
+  add_column(FeatureClass = as.factor(ifelse(grepl("PWY",plotData$Feature),"Pathway","OTU"))) -> plotData
+
+plotData = plotData[1:10,]
+
+p_feat = ggplot(data = plotData,aes(x = reorder(Feature, MeanDecreaseGini), y = MeanDecreaseGini)) +
+  theme_ipsum_rc(grid = "X") +
+  xlab(element_blank()) +
+  ylab("Mean decrease in GINI impurity") + 
+  coord_flip(ylim=c(1,2.1)) +
+  geom_segment( aes(x=reorder(Feature, MeanDecreaseGini),
+                    xend=reorder(Feature, MeanDecreaseGini),
+                    y=0, yend=MeanDecreaseGini), color="grey") +
+    geom_point(size = 4, aes(color = FeatureClass)) +
+  scale_color_manual(values=c(wes_palette("FantasticFox1")[5],wes_palette("Chevalier1")[1])) +
+  theme(axis.ticks.x = element_blank()) 
+p_feat
+
+#ggsave(file = "VarImportance.svg", plot = p_feat,width = 10, height = 5, device = "svg")
+``` 
+
+We can evaluate the model with a ROC-curve and confusion matrix.
+```{r, fig.width=4, fig.height=4}
+# Generate ROC-curve for training data
+rf.roc = roc(train_label,rf$votes[,2])
+p_roc = ggroc(rf.roc) +
+  theme_ipsum_rc() +
+  geom_abline(intercept = 1,
+              slope = 1,
+              linetype = "dashed",
+              size = 0.5) +
+  ylab("True positive rate") +
+  xlab("True negative rate")
+p_roc
+auc(rf.roc)
+
+table(train_label, rf$predicted)
+
+#ggsave(file = "ROC.svg", plot = p_roc, width = 5, height = 5, device = "svg")
+```
+
+###Test model on validation data set
+```{r}
+val_physeq_f_level = taxa_level(val_physeq_f, which_level = "Species")
+# Use only melanoma data
+OTU_test = as.matrix(t(as.data.frame(otu_table(val_physeq_f_level))))[rownames(diffOTUs),]
+
+
+path_test = val_pathAbundance[rownames(DEpaths_mel),]
+
+test = t(rbind(OTU_test,
+                path_test))
+
+pred = predict(rf, newdata = test, type = c("response","vote"))
+cat("Confusion matrix: \n")
+table(pred, val_clin$Response)
+
+pred = predict(rf, newdata = test, type = "vote")
+# Generate ROC-curve for testing data
+rf.roc = roc(val_clin$Response,pred[,2])
+p_roc_test = ggroc(rf.roc) +
+  theme_ipsum_rc() +
+  geom_abline(intercept = 1,
+              slope = 1,
+              linetype = "dashed",
+              size = 0.5) +
+  ylab("True positive rate") +
+  xlab("True negative rate") +
+  theme(aspect.ratio = 1)
+p_roc_test
+auc(rf.roc)
+ci.auc(rf.roc)
+
+# library(epiR)
+# epi.tests(t)
+# fisher.test(t)
+```
+
+Combine both ROC curves to one figure
+```{r}
+p_both = p_roc|p_roc_test
+p_roc|p_roc_test
+
+ggsave(filename = "/Users/angelol/Documents/PhD/Gut-microbiome-immunotherapy/Figures/ROCboth.svg", plot = p_both)
+```
+
+
+Let's generate Kaplan-Meier curves for the predictions.
+Start by generating a dataset
+```{r}
+time = val_clin$months_to_progression
+for (i in 1:length(time)) {
+  if(is.na(time[i])){
+    time[i] = val_clin$months_followed[i]
+  }
+}
+
+km_data = cbind(val_clin, time, pred)
+
+km_data
+```
+
+Fit Kaplan-Meier estimate of survival
+```{r, fig.width=8, fig.height=5}
+km_fit = survfit(Surv(time, progressed) ~ Response, data = km_data)
+summary(km_fit)
+
+ggsurvplot(
+  fit = km_fit,
+  data = km_data,
+  size = 1,
+  palette =
+    c("violetred", "turquoise3"),
+  conf.int = FALSE,
+  pval = TRUE,
+  risk.table = TRUE,
+  risk.table.col = "strata",
+  legend.labs = c("NR", "R"),
+  risk.table.height = 0.25,
+  ggtheme = theme_bw(),
+  xlab = "Months",
+  ylab = "% progression-free",
+  censor.shape = "|"
+)
+
+km_diff = survdiff(Surv(time, progressed) ~ Response, data = km_data)
+km_diff
+
+km_fit = survfit(Surv(time, progressed) ~ pred, data = km_data)
+summary(km_fit)
+
+p_surv = ggsurvplot(
+  fit = km_fit,
+  data = km_data,
+  size = 1,
+  palette =
+    c("violetred", "turquoise3"),
+  conf.int = FALSE,
+  pval = TRUE,
+  risk.table = TRUE,
+  risk.table.col = "strata",
+  legend.labs = c("NR", "R"),
+  risk.table.height = 0.25,
+  ggtheme = theme_bw(),
+  xlab = "Months",
+  ylab = "% progression-free",
+  censor.shape = "|",
+  risk.table.title = "No. at risk"
+)
+p_surv
+
+
+pdf("surv.pdf", width = )
+p_surv
+dev.off
+
+km_diff = survdiff(Surv(time, progressed) ~ pred, data = km_data)
+km_diff
+```
+
+Lets calculate the hazard ratio for the predicted groups
+```{r,fig.height=2,fig.width=7}
+cox_fit <- coxph(Surv(time, progressed) ~ pred + Age + bmi + immunotherapy,
+                   data = km_data)
+p_hazard = ggforest(cox_fit, data = km_data)
+p_hazard
+
+cox_fit <- coxph(Surv(time, progressed) ~ pred,
+                   data = km_data)
+p_hazard = ggforest(cox_fit, data = km_data)
+p_hazard
+
+pdf("hazard.pdf", width = 8, height = 5)
+p_hazard
+dev.off
+
+```
+
+
+
+Hmmmm, looks pretty bad...
+Let's fit a Cox proportional hazards model instead
+```{r}
+km_fit = coxph(Surv(time, status) ~ pred, data = km_data)
+summary(km_fit)
+autoplot(km_fit)
+
+cox_fit = coxph(Surv(months_to_progression, progressed) ~ pred + Sex + Ethnicity + immunotherapy + mel.type + stage + bmi, data = km_data)
+summary(cox_fit)
+autoplot(cox_fit) +
+  xlab("Months") +
+  ylab("% progression-free") +
+  scale_color_manual(values=c("violetred", "turquoise3")) +
+  theme_bw()
+
+km_fit = survfit(Surv(time, status) ~ Response, data = km_data)
+
+summary(km_fit)
+
+autoplot(km_fit)
 ```
